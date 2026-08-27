@@ -4,6 +4,7 @@ import { COLORS } from "./CONSTANTS/colors";
 import { getRegisteredParts } from "./parts";
 import { CanvasShell, CanvasShellHandle } from "./canvas/CanvasShell";
 import { saveProject, loadProject } from "./diagram";
+import { ToolBox } from "./canvas/ToolBox";
 
 function App() {
   const [error, setError] = useState<string | null>(null);
@@ -97,8 +98,9 @@ function App() {
         Registered Parts: {parts.length} ({parts.map(p => p.label).join(", ")})
       </p>
 
-      <div style={{ flex: 1, width: "100%", minHeight: 0 }}>
+      <div style={{ flex: 1, width: "100%", minHeight: 0, position: "relative" }}>
         <CanvasShell ref={canvasRef} />
+        <ToolBox onAddPart={(type) => canvasRef.current?.addPart(type)} />
       </div>
     </main>
   );

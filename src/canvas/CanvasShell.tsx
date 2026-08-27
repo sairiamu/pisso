@@ -16,7 +16,9 @@ import { Panel } from "../components/Panel";
 import { COLORS } from "../CONSTANTS/colors";
 import { PartNode } from "./PartNode";
 import { WireEdge } from "./WireEdge";
-import { resolveNode, Diagram } from "../diagram";
+import { InspectorPanel } from "./InspectorPanel";
+import { resolveNode, Diagram, PartInstance } from "../diagram";
+import { PARTS_REGISTRY } from "../parts/registry";
 
 const nodeTypes = {
   part: PartNode,
@@ -29,47 +31,82 @@ const edgeTypes = {
 export interface CanvasShellHandle {
   getDiagram: () => Diagram;
   setDiagram: (diagram: Diagram) => void;
+  addPart: (type: string) => void;
 }
 
 export const CanvasShell = forwardRef<CanvasShellHandle>((_, ref) => {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
-  useImperativeHandle(ref, () => ({
-    getDiagram: () => ({
-      version: 1,
-      parts: nodes.map((n) => ({
-        id: n.id,
-        type: (n.data as any).type,
-        x: n.position.x,
-        y: n.position.y,
-        rotation: (n.data as any).rotation || 0,
-        attrs: (n.data as any).attrs || {},
-      })),
-      connections: edges.map((e) => ({
-        id: e.id,
-        from: { partId: e.source, pin: e.sourceHandle || "" },
-        to: { partId: e.target, pin: e.targetHandle || "" },
-      })),
+  useImperativeHandle(
+    ref,
+    () => ({
+      getDiagram: () => ({
+        version: 1,
+        parts: nodes.map((n) => ({
+          id: n.id,
+          type: (n.data as any).type,
+          x: n.position.x,
+          y: n.position.y,
+          rotation: (n.data as any).rotation || 0,
+          attrs: (n.data as any).attrs || {},
+        })),
+        connections: edges.map((e) => ({
+          id: e.id,
+          from: { partId: e.source, pin: e.sourceHandle || "" },
+          to: { partId: e.target, pin: e.targetHandle || "" },
+        })),
+      }),
+      setDiagram: (diagram: Diagram) => {
+        setNodes(
+          diagram.parts.map((p) => ({
+            id: p.id,
+            type: "part",
+            position: { x: p.x, y: p.y },
+            data: { type: p.type, attrs: p.attrs, rotation: p.rotation },
+          }))
+        );
+        setEdges(
+          diagram.connections.map((c) => ({
+            id: c.id,
+            source: c.from.partId,
+            sourceHandle: c.from.pin,
+            target: c.to.partId,
+            targetHandle: c.to.pin,
+            type: "wire",
+            data: { isShorted: false },
+          }))
+        );
+      },
+      addPart: (type: string) => {
+        const timestamp = Date.now();
+        const id = `${type}-${timestamp}`;
+        const definition = PARTS_REGISTRY.get(type);
+
+        setNodes((nds) => {
+          // StrictMode or double-click guard: don't add if ID already exists
+          if (nds.some((n) => n.id === id)) return nds;
+
+          return [
+            ...nds,
+            {
+              id,
+              type: "part",
+              position: { x: 100, y: 100 },
+              data: {
+                type,
+                attrs: definition?.defaultAttrs
+                  ? { ...definition.defaultAttrs }
+                  : {},
+                rotation: 0,
+              },
+            },
+          ];
+        });
+      },
     }),
-    setDiagram: (diagram: Diagram) => {
-      setNodes(diagram.parts.map(p => ({
-        id: p.id,
-        type: "part",
-        position: { x: p.x, y: p.y },
-        data: { type: p.type, attrs: p.attrs, rotation: p.rotation }
-      })));
-      setEdges(diagram.connections.map(c => ({
-        id: c.id,
-        source: c.from.partId,
-        sourceHandle: c.from.pin,
-        target: c.to.partId,
-        targetHandle: c.to.pin,
-        type: "wire",
-        data: { isShorted: false }
-      })));
-    }
-  }));
+    [nodes, edges, setNodes, setEdges]
+  );
 
   // Validate connections and detect shorts
   useEffect(() => {
@@ -126,6 +163,39 @@ export const CanvasShell = forwardRef<CanvasShellHandle>((_, ref) => {
     [setEdges]
   );
 
+  const onUpdateAttributes = useCallback(
+    (id: string, attrs: Record<string, any>) => {
+      setNodes((nds) =>
+        nds.map((node) => {
+          if (node.id === id) {
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                attrs,
+              },
+            };
+          }
+          return node;
+        })
+      );
+    },
+    [setNodes]
+  );
+
+  const selectedNode = nodes.find((n) => n.selected);
+  const selectedPart = useMemo<PartInstance | null>(() => {
+    if (!selectedNode || selectedNode.type !== "part") return null;
+    return {
+      id: selectedNode.id,
+      type: (selectedNode.data as any).type,
+      x: selectedNode.position.x,
+      y: selectedNode.position.y,
+      rotation: (selectedNode.data as any).rotation || 0,
+      attrs: (selectedNode.data as any).attrs || {},
+    };
+  }, [selectedNode]);
+
   const memoizedNodeTypes = useMemo(() => nodeTypes, []);
   const memoizedEdgeTypes = useMemo(() => edgeTypes, []);
 
@@ -137,10 +207,10 @@ export const CanvasShell = forwardRef<CanvasShellHandle>((_, ref) => {
         height: "100%",
         overflow: "hidden",
         display: "flex",
-        flexDirection: "column",
+        flexDirection: "row",
       }}
     >
-      <div style={{ flex: 1, width: "100%", height: "100%", minHeight: "600px" }}>
+      <div style={{ flex: 1, height: "100%", minHeight: "600px" }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -162,6 +232,14 @@ export const CanvasShell = forwardRef<CanvasShellHandle>((_, ref) => {
           />
         </ReactFlow>
       </div>
+      {selectedPart && (
+        <div style={{ width: "260px", borderLeft: `1px solid ${COLORS.GRAPHITE_500}` }}>
+          <InspectorPanel
+            selectedPart={selectedPart}
+            onUpdateAttributes={onUpdateAttributes}
+          />
+        </div>
+      )}
     </Panel>
   );
 });

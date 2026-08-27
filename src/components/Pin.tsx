@@ -7,9 +7,11 @@ interface PinProps {
   x: number;
   y: number;
   type?: "source" | "target";
+  _internal?: boolean;
 }
 
-export const Pin: React.FC<PinProps> = ({ id, x, y, type = "source" }) => {
+export const Pin: React.FC<PinProps> = ({ id, x, y, type = "source", _internal = false }) => {
+  if (!_internal) return null;
   const [isHovered, setIsHovered] = useState(false);
 
   return (
