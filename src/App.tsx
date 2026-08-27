@@ -6,6 +6,7 @@ import { CanvasShell, CanvasShellHandle } from "./canvas/CanvasShell";
 import { saveProject, loadProject } from "./diagram";
 import { ToolBox } from "./canvas/ToolBox";
 import { CodeEditor } from "./components/CodeEditor";
+import { EditorTabs } from "./canvas/EditorTabs";
 
 const INITIAL_CODE = `#include <Arduino.h>
 
@@ -128,11 +129,10 @@ function App() {
           borderRadius: "8px",
           overflow: "hidden",
           display: "flex",
-          flexDirection: "column"
+          flexDirection: "column",
+          backgroundColor: COLORS.GRAPHITE_900
         }}>
-          <div style={{ padding: "8px 12px", backgroundColor: COLORS.GRAPHITE_700, borderBottom: `1px solid ${COLORS.GRAPHITE_500}`, fontSize: "12px", color: COLORS.FOG }}>
-            sketch.ino
-          </div>
+          <EditorTabs />
           <CodeEditor value={code} onChange={setCode} />
         </div>
       </div>
