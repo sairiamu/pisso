@@ -74,6 +74,9 @@ export const CanvasShell: React.FC = () => {
       parts: nodes.map((n) => ({
         id: n.id,
         type: (n.data as any).type,
+        x: n.position.x,
+        y: n.position.y,
+        rotation: (n.data as any).rotation || 0,
         attrs: (n.data as any).attrs || {},
       })),
       connections: edges.map((e) => ({

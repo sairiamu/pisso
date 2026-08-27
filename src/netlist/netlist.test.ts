@@ -4,9 +4,9 @@ import { Diagram, PinRef } from "./types";
 const mockDiagram: Diagram = {
   version: 1,
   parts: [
-    { id: "bb1", type: "wokwi-breadboard", attrs: {} },
-    { id: "uno1", type: "wokwi-arduino-uno", attrs: {} },
-    { id: "led1", type: "wokwi-led", attrs: {} }
+    { id: "bb1", type: "wokwi-breadboard", x: 0, y: 0, rotation: 0, attrs: {} },
+    { id: "uno1", type: "wokwi-arduino-uno", x: 0, y: 0, rotation: 0, attrs: {} },
+    { id: "led1", type: "wokwi-led", x: 0, y: 0, rotation: 0, attrs: {} }
   ],
   connections: [
     {
