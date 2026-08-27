@@ -5,6 +5,7 @@ import { PARTS_REGISTRY } from "../parts/registry";
 export type PartNodeData = {
   type: string;
   attrs?: Record<string, any>;
+  rotation?: number;
 };
 
 export const PartNode: React.FC<NodeProps> = (props) => {
@@ -24,8 +25,19 @@ export const PartNode: React.FC<NodeProps> = (props) => {
       );
     }
 
+    const rotation = data.rotation || 0;
+
     return (
-      <div className="pissow-part-node" style={{ position: "relative", minWidth: 50, minHeight: 50 }}>
+      <div
+        className="pissow-part-node"
+        style={{
+          position: "relative",
+          minWidth: 50,
+          minHeight: 50,
+          transform: `rotate(${rotation}deg)`,
+          transformOrigin: "center center"
+        }}
+      >
         {definition.render({ attrs: data.attrs || {} })}
         {/* Fallback handle just in case */}
         <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />

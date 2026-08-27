@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback, useEffect } from "react";
+import React, { useMemo, useCallback, useEffect, useState, useImperativeHandle, forwardRef } from "react";
 import {
   ReactFlow,
   Background,
@@ -16,7 +16,7 @@ import { Panel } from "../components/Panel";
 import { COLORS } from "../CONSTANTS/colors";
 import { PartNode } from "./PartNode";
 import { WireEdge } from "./WireEdge";
-import { resolveNode, Diagram } from "../netlist";
+import { resolveNode, Diagram } from "../diagram";
 
 const nodeTypes = {
   part: PartNode,
@@ -26,49 +26,55 @@ const edgeTypes = {
   wire: WireEdge,
 };
 
-const initialNodes: Node[] = [
-  {
-    id: "uno-1",
-    type: "part",
-    position: { x: 50, y: 50 },
-    data: { type: "wokwi-arduino-uno", attrs: {} },
-  },
-  {
-    id: "res-1",
-    type: "part",
-    position: { x: 350, y: 150 },
-    data: { type: "wokwi-resistor", attrs: { value: "220" } },
-  },
-  {
-    id: "led-1",
-    type: "part",
-    position: { x: 500, y: 50 },
-    data: { type: "wokwi-led", attrs: { color: "red" } },
-  },
-  {
-    id: "bb-1",
-    type: "part",
-    position: { x: 50, y: 400 },
-    data: { type: "wokwi-breadboard", attrs: {} },
-  },
-];
+export interface CanvasShellHandle {
+  getDiagram: () => Diagram;
+  setDiagram: (diagram: Diagram) => void;
+}
 
-export const CanvasShell: React.FC = () => {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([
-    {
-      id: "short-wire",
-      source: "uno-1",
-      target: "uno-1",
-      sourceHandle: "5V",
-      targetHandle: "GND.2",
-      type: "wire",
-      data: { isShorted: false },
-    },
-  ]);
+export const CanvasShell = forwardRef<CanvasShellHandle>((_, ref) => {
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+
+  useImperativeHandle(ref, () => ({
+    getDiagram: () => ({
+      version: 1,
+      parts: nodes.map((n) => ({
+        id: n.id,
+        type: (n.data as any).type,
+        x: n.position.x,
+        y: n.position.y,
+        rotation: (n.data as any).rotation || 0,
+        attrs: (n.data as any).attrs || {},
+      })),
+      connections: edges.map((e) => ({
+        id: e.id,
+        from: { partId: e.source, pin: e.sourceHandle || "" },
+        to: { partId: e.target, pin: e.targetHandle || "" },
+      })),
+    }),
+    setDiagram: (diagram: Diagram) => {
+      setNodes(diagram.parts.map(p => ({
+        id: p.id,
+        type: "part",
+        position: { x: p.x, y: p.y },
+        data: { type: p.type, attrs: p.attrs, rotation: p.rotation }
+      })));
+      setEdges(diagram.connections.map(c => ({
+        id: c.id,
+        source: c.from.partId,
+        sourceHandle: c.from.pin,
+        target: c.to.partId,
+        targetHandle: c.to.pin,
+        type: "wire",
+        data: { isShorted: false }
+      })));
+    }
+  }));
 
   // Validate connections and detect shorts
   useEffect(() => {
+    if (nodes.length === 0) return;
+
     const diagram: Diagram = {
       version: 1,
       parts: nodes.map((n) => ({
@@ -158,4 +164,4 @@ export const CanvasShell: React.FC = () => {
       </div>
     </Panel>
   );
-};
+});
