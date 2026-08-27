@@ -1,7 +1,18 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use tauri::Manager;
+
+/// GNU tools on Windows often choke on the Verbatim prefix (\\?\)
+/// provided by Rust's canonicalize() or Tauri's path resolvers.
+fn clean_path<P: AsRef<Path>>(path: P) -> PathBuf {
+    let path_str = path.as_ref().to_string_lossy();
+    if path_str.starts_with(r"\\?\") {
+        PathBuf::from(&path_str[4..])
+    } else {
+        path.as_ref().to_path_buf()
+    }
+}
 
 #[tauri::command]
 fn save_diagram(project_path: String, diagram_json: String) -> Result<(), String> {
@@ -9,6 +20,29 @@ fn save_diagram(project_path: String, diagram_json: String) -> Result<(), String
     path.push("diagram.json");
 
     fs::write(path, diagram_json).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_playground_path(app_handle: tauri::AppHandle) -> Result<String, String> {
+    let mut path = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+    path.push("playground");
+
+    if !path.exists() {
+        fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+    }
+
+    Ok(clean_path(path).to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn save_sketch(project_path: String, sketch_code: String) -> Result<(), String> {
+    let mut path = PathBuf::from(project_path);
+    path.push("sketch.ino");
+
+    fs::write(path, sketch_code).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -29,6 +63,9 @@ async fn compile_sketch(
         .path()
         .resource_dir()
         .map_err(|e| e.to_string())?;
+
+    let resource_dir = clean_path(resource_dir);
+    let sketch_path = clean_path(sketch_path);
 
     let toolchain_bin = resource_dir.join("resources").join("avr-toolchain").join("bin");
 
@@ -66,6 +103,8 @@ async fn compile_sketch(
         .arg("-DARDUINO_ARCH_AVR")
         .arg(format!("-I{}", arduino_core.display()))
         .arg(format!("-I{}", arduino_variants.display()))
+        .arg("-x")
+        .arg("c++")
         .arg("-o")
         .arg(&output_elf)
         .arg(&sketch_path)
@@ -98,7 +137,13 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![save_diagram, load_diagram, compile_sketch])
+        .invoke_handler(tauri::generate_handler![
+            save_diagram,
+            save_sketch,
+            load_diagram,
+            compile_sketch,
+            get_playground_path
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

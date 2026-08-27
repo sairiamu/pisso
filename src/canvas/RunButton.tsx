@@ -1,0 +1,120 @@
+import React, { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { COLORS } from "../CONSTANTS/colors";
+import { writeSketch } from "../diagram/sketch";
+
+interface RunButtonProps {
+  projectPath: string | null;
+  code: string;
+  onOutput?: (output: string) => void;
+  onProjectPathChange?: (path: string) => void;
+}
+
+/**
+ * RunButton component to compile the current sketch.
+ * If no project is open, it uses a hidden playground directory to avoid interrupting the user.
+ */
+export const RunButton: React.FC<RunButtonProps> = ({
+  projectPath,
+  code,
+  onOutput,
+}) => {
+  const [isCompiling, setIsCompiling] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  const handleRun = async () => {
+    let activePath = projectPath;
+
+    if (!activePath) {
+      try {
+        // Automatically use a playground directory if no project is open
+        activePath = await invoke<string>("get_playground_path");
+      } catch (err) {
+        onOutput?.(`System Error: Failed to initialize playground. ${err}`);
+        return;
+      }
+    }
+
+    setIsCompiling(true);
+    setStatus("Compiling...");
+    onOutput?.("Compiling sketch...");
+
+    try {
+      // 1. Save the current sketch buffer to sketch.ino
+      await invoke("save_sketch", { projectPath: activePath, sketchCode: writeSketch(code) });
+
+      // 2. Invoke the compile command
+      const sketchPath = `${activePath}/sketch.ino`;
+      const hexPath = await invoke<string>("compile_sketch", {
+        sketchPath,
+        boardFqbn: "arduino:avr:uno",
+      });
+
+      const successMsg = `Successfully compiled: ${hexPath.split(/[\\\/]/).pop()}`;
+      setStatus(successMsg);
+      onOutput?.(successMsg);
+    } catch (err) {
+      const errorMsg = String(err);
+      setStatus(`Error: ${errorMsg.split("\n")[0]}`);
+      onOutput?.(errorMsg);
+      console.error("Compilation error:", err);
+    } finally {
+      setIsCompiling(false);
+      // Clear status after 5 seconds if successful
+      if (!status?.startsWith("Error")) {
+        setTimeout(() => setStatus(null), 5000);
+      }
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+      {status && (
+        <div
+          style={{
+            fontSize: "11px",
+            color: status.startsWith("Error") ? COLORS.FAULT_RED : COLORS.TRACE_GREEN,
+            maxWidth: "200px",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            fontFamily: "Inter, sans-serif",
+            backgroundColor: `${COLORS.GRAPHITE_900}CC`,
+            padding: "4px 8px",
+            borderRadius: "4px",
+            border: `1px solid ${status.startsWith("Error") ? COLORS.FAULT_RED : COLORS.TRACE_GREEN}44`,
+            pointerEvents: "none"
+          }}
+          title={status}
+        >
+          {status}
+        </div>
+      )}
+      <button
+        onClick={handleRun}
+        disabled={isCompiling}
+        style={{
+          backgroundColor: isCompiling ? COLORS.GRAPHITE_500 : COLORS.SOLDER_COPPER,
+          color: COLORS.WARM_WHITE,
+          border: "none",
+          borderRadius: "6px",
+          padding: "8px 20px",
+          cursor: isCompiling ? "wait" : "pointer",
+          fontWeight: 700,
+          fontSize: "0.8rem",
+          textTransform: "uppercase",
+          letterSpacing: "0.05em",
+          boxShadow: isCompiling ? "none" : "0 2px 4px rgba(0,0,0,0.3)",
+          transition: "all 0.2s ease-in-out",
+          fontFamily: "Inter, sans-serif",
+          opacity: 1,
+          outline: "none",
+          position: "relative",
+          zIndex: 10
+        }}
+      >
+        {isCompiling ? "Compiling..." : "Run"}
+      </button>
+    </div>
+  );
+};

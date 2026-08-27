@@ -123,29 +123,28 @@ export const ToolBox: React.FC<ToolBoxProps> = ({ onAddPart }) => {
     >
       <button
         onClick={() => setIsOpen(!isOpen)}
-        style={{
-          backgroundColor: isOpen ? COLORS.SOLDER_COPPER : COLORS.GRAPHITE_700,
-          color: COLORS.WARM_WHITE,
-          border: `1px solid ${COLORS.GRAPHITE_500}`,
-          borderRadius: "8px",
-          padding: "10px 20px",
-          cursor: "pointer",
-          fontWeight: 700,
-          fontSize: "0.85rem",
-          textTransform: "uppercase",
-          letterSpacing: "0.05em",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-          transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-          fontFamily: "Inter, sans-serif",
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          outline: "none"
-        }}
-      >
-        {isOpen ? "Close" : "ToolBox"}
-      </button>
-
+          style={{
+            backgroundColor: isOpen ? COLORS.SOLDER_COPPER : COLORS.GRAPHITE_700,
+            color: COLORS.WARM_WHITE,
+            border: `1px solid ${COLORS.GRAPHITE_500}`,
+            borderRadius: "8px",
+            padding: "10px 20px",
+            cursor: "pointer",
+            fontWeight: 700,
+            fontSize: "0.85rem",
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+            transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+            fontFamily: "Inter, sans-serif",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            outline: "none"
+          }}
+        >
+          {isOpen ? "Close" : "ToolBox"}
+        </button>
       {isOpen && (
         <Panel
           showScrews={true}

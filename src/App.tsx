@@ -7,6 +7,12 @@ import { saveProject, loadProject } from "./diagram";
 import { ToolBox } from "./canvas/ToolBox";
 import { CodeEditor } from "./components/CodeEditor";
 import { EditorTabs } from "./canvas/EditorTabs";
+import { BuildConsole } from "./canvas/BuildConsole";
+
+export interface FileEntry {
+  name: string;
+  content: string;
+}
 
 const INITIAL_CODE = `#include <Arduino.h>
 
@@ -28,8 +34,35 @@ void loop() {
 function App() {
   const [error, setError] = useState<string | null>(null);
   const [projectPath, setProjectPath] = useState<string | null>(null);
-  const [code, setCode] = useState(INITIAL_CODE);
+  const [files, setFiles] = useState<FileEntry[]>([
+    { name: "sketch.ino", content: INITIAL_CODE }
+  ]);
+  const [activeFileIndex, setActiveFileIndex] = useState(0);
+  const [buildOutput, setBuildOutput] = useState<string | null>(null);
   const canvasRef = useRef<CanvasShellHandle>(null);
+
+  const activeFile = files[activeFileIndex] || files[0];
+
+  const handleCodeChange = (newContent: string) => {
+    setFiles(prev => prev.map((f, i) =>
+      i === activeFileIndex ? { ...f, content: newContent } : f
+    ));
+  };
+
+  const handleAddTab = () => {
+    const newName = `file${files.length}.h`;
+    setFiles([...files, { name: newName, content: "// New header file\n" }]);
+    setActiveFileIndex(files.length);
+  };
+
+  const handleCloseTab = (index: number) => {
+    if (files.length <= 1) return;
+    const newFiles = files.filter((_, i) => i !== index);
+    setFiles(newFiles);
+    if (activeFileIndex >= newFiles.length) {
+      setActiveFileIndex(newFiles.length - 1);
+    }
+  };
 
   useEffect(() => {
     const handleError = (event: ErrorEvent) => {
@@ -121,7 +154,9 @@ function App() {
       <div style={{ flex: 1, width: "100%", minHeight: 0, display: "flex", gap: "20px" }}>
         <div style={{ flex: 2, position: "relative", minHeight: 0 }}>
           <CanvasShell ref={canvasRef} />
-          <ToolBox onAddPart={(type) => canvasRef.current?.addPart(type)} />
+          <ToolBox
+            onAddPart={(type) => canvasRef.current?.addPart(type)}
+          />
         </div>
         <div style={{
           flex: 1,
@@ -130,10 +165,23 @@ function App() {
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
-          backgroundColor: COLORS.GRAPHITE_900
+          backgroundColor: COLORS.GRAPHITE_900,
+          position: "relative"
         }}>
-          <EditorTabs />
-          <CodeEditor value={code} onChange={setCode} />
+          <EditorTabs
+            projectPath={projectPath}
+            files={files}
+            activeFileIndex={activeFileIndex}
+            onSelectTab={setActiveFileIndex}
+            onAddTab={handleAddTab}
+            onCloseTab={handleCloseTab}
+            onOutput={setBuildOutput}
+            onProjectPathChange={setProjectPath}
+          />
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <CodeEditor value={activeFile.content} onChange={handleCodeChange} />
+          </div>
+          <BuildConsole output={buildOutput} onClose={() => setBuildOutput(null)} />
         </div>
       </div>
     </main>
