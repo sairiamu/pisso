@@ -5,10 +5,29 @@ import { getRegisteredParts } from "./parts";
 import { CanvasShell, CanvasShellHandle } from "./canvas/CanvasShell";
 import { saveProject, loadProject } from "./diagram";
 import { ToolBox } from "./canvas/ToolBox";
+import { CodeEditor } from "./components/CodeEditor";
+
+const INITIAL_CODE = `#include <Arduino.h>
+
+// Example C++ code for verification
+void setup() {
+  pinMode(LED_BUILTIN, OUTPUT);
+  Serial.begin(9600);
+}
+
+void loop() {
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(1000);
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(1000);
+  Serial.println("Pulse sent.");
+}
+`;
 
 function App() {
   const [error, setError] = useState<string | null>(null);
   const [projectPath, setProjectPath] = useState<string | null>(null);
+  const [code, setCode] = useState(INITIAL_CODE);
   const canvasRef = useRef<CanvasShellHandle>(null);
 
   useEffect(() => {
@@ -98,9 +117,24 @@ function App() {
         Registered Parts: {parts.length} ({parts.map(p => p.label).join(", ")})
       </p>
 
-      <div style={{ flex: 1, width: "100%", minHeight: 0, position: "relative" }}>
-        <CanvasShell ref={canvasRef} />
-        <ToolBox onAddPart={(type) => canvasRef.current?.addPart(type)} />
+      <div style={{ flex: 1, width: "100%", minHeight: 0, display: "flex", gap: "20px" }}>
+        <div style={{ flex: 2, position: "relative", minHeight: 0 }}>
+          <CanvasShell ref={canvasRef} />
+          <ToolBox onAddPart={(type) => canvasRef.current?.addPart(type)} />
+        </div>
+        <div style={{
+          flex: 1,
+          border: `1px solid ${COLORS.GRAPHITE_500}`,
+          borderRadius: "8px",
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column"
+        }}>
+          <div style={{ padding: "8px 12px", backgroundColor: COLORS.GRAPHITE_700, borderBottom: `1px solid ${COLORS.GRAPHITE_500}`, fontSize: "12px", color: COLORS.FOG }}>
+            sketch.ino
+          </div>
+          <CodeEditor value={code} onChange={setCode} />
+        </div>
       </div>
     </main>
   );

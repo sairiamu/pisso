@@ -1,0 +1,37 @@
+import { COLORS } from "./colors";
+import { TYPOGRAPHY } from "./typography";
+
+/**
+ * Tokens for the code editor, consistent with the Graphite/Solder-Copper/Trace-Green palette.
+ */
+export const EDITOR_CONFIG = {
+  FONT_FAMILY: TYPOGRAPHY.CODE,
+  FONT_SIZE: "14px",
+  LINE_HEIGHT: 1.6,
+
+  THEME: {
+    BACKGROUND: COLORS.GRAPHITE_900,
+    FOREGROUND: COLORS.WARM_WHITE,
+    SELECTION: COLORS.GRAPHITE_500,
+    CURSOR: COLORS.SOLDER_COPPER,
+    LINE_NUMBERS: COLORS.FOG,
+    GUTTER_BACKGROUND: COLORS.GRAPHITE_900,
+  },
+
+  SYNTAX: {
+    COMMENT: COLORS.FOG,
+    KEYWORD: COLORS.SOLDER_COPPER,
+    STRING: COLORS.TRACE_GREEN,
+    NUMBER: COLORS.FAULT_RED,
+    OPERATOR: COLORS.WARM_WHITE,
+    FUNCTION: COLORS.TRACE_GREEN,
+    VARIABLE: COLORS.WARM_WHITE,
+    CONSTANT: COLORS.SOLDER_COPPER,
+    TYPE: COLORS.SOLDER_COPPER,
+    PUNCTUATION: COLORS.FOG,
+  },
+} as const;
+
+export type EditorConfig = typeof EDITOR_CONFIG;
+export type EditorTheme = typeof EDITOR_CONFIG.THEME;
+export type EditorSyntax = typeof EDITOR_CONFIG.SYNTAX;
