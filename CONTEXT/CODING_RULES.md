@@ -24,6 +24,9 @@ Agents and contributors must not edit outside that radius without a new task.
 This keeps circuit-designer work from silently touching compiler/simulator
 code before those subsystems exist.
 
+## UI & Assets
+- **Icons**: Use `lucide-react` only. No emoji icons or raw unicode symbols (e.g., ×, +, 📂, 💾) should be used for UI actions. Sizing and coloring should come from `CONSTANTS`.
+
 ## File/Folder Conventions
 - `src/parts/` — part definitions (data), one file per part type
 - `src/canvas/` — XYFlow node/edge components, canvas state

@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import { getRegisteredParts, PartDefinition } from "../parts";
 import { Panel } from "../components/Panel";
 import { COLORS } from "../CONSTANTS/colors";
+import { PANEL } from "../CONSTANTS/panel";
 
 interface ToolBoxProps {
   onAddPart: (type: string) => void;
@@ -27,7 +28,7 @@ const PartThumbnail: React.FC<{ part: PartDefinition; onClick: () => void }> = (
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        padding: "16px 8px",
+        padding: `${PANEL.SPACING.LG} ${PANEL.SPACING.MD}`,
         backgroundColor: isHovered ? COLORS.GRAPHITE_500 : COLORS.GRAPHITE_800,
         border: `1px solid ${isHovered ? COLORS.SOLDER_COPPER : COLORS.GRAPHITE_500}`,
         borderRadius: "8px",
@@ -35,8 +36,8 @@ const PartThumbnail: React.FC<{ part: PartDefinition; onClick: () => void }> = (
         cursor: "pointer",
         transition: "all 0.1s ease-in-out",
         width: "100%",
-        height: "120px",
-        gap: "12px",
+        height: "130px",
+        gap: PANEL.SPACING.MD,
         position: "relative",
         overflow: "hidden",
         userSelect: "none",
@@ -171,18 +172,18 @@ export const ToolBox: React.FC<ToolBoxProps> = ({ onAddPart }) => {
         <Panel
           showScrews={true}
           style={{
-            width: "320px",
+            width: "340px",
             maxHeight: "calc(100vh - 100px)",
             display: "flex",
             flexDirection: "column",
-            padding: "24px",
+            padding: PANEL.SPACING.XL,
             boxSizing: "border-box",
             boxShadow: "0 24px 64px rgba(0,0,0,0.7)",
             border: `1px solid ${COLORS.GRAPHITE_500}`,
             backgroundColor: COLORS.GRAPHITE_700,
           }}
         >
-          <div style={{ marginBottom: "20px" }}>
+          <div style={{ marginBottom: PANEL.SPACING.XL }}>
             <h2
               style={{
                 margin: "0 0 4px 0",
@@ -206,8 +207,8 @@ export const ToolBox: React.FC<ToolBoxProps> = ({ onAddPart }) => {
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{
               width: "100%",
-              padding: "10px 14px",
-              marginBottom: "24px",
+              padding: "12px 16px",
+              marginBottom: PANEL.SPACING.XXL,
               backgroundColor: COLORS.GRAPHITE_900,
               border: `1px solid ${COLORS.GRAPHITE_500}`,
               borderRadius: "6px",
@@ -226,7 +227,7 @@ export const ToolBox: React.FC<ToolBoxProps> = ({ onAddPart }) => {
               paddingRight: "8px",
               display: "flex",
               flexDirection: "column",
-              gap: "28px",
+              gap: PANEL.SPACING.XXL,
             }}
           >
             {Object.entries(groupedParts).map(([category, parts]) => (
@@ -237,9 +238,9 @@ export const ToolBox: React.FC<ToolBoxProps> = ({ onAddPart }) => {
                     textTransform: "uppercase",
                     letterSpacing: "0.15em",
                     color: COLORS.SOLDER_COPPER,
-                    marginBottom: "16px",
+                    marginBottom: PANEL.SPACING.LG,
                     borderBottom: `1px solid ${COLORS.GRAPHITE_500}`,
-                    paddingBottom: "8px",
+                    paddingBottom: PANEL.SPACING.SM,
                     fontFamily: "Inter, sans-serif",
                     fontWeight: 800,
                   }}
@@ -250,7 +251,7 @@ export const ToolBox: React.FC<ToolBoxProps> = ({ onAddPart }) => {
                   style={{
                     display: "grid",
                     gridTemplateColumns: "repeat(2, 1fr)",
-                    gap: "16px",
+                    gap: PANEL.SPACING.LG,
                   }}
                 >
                   {parts.map((part) => (

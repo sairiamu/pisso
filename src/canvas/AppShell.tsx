@@ -1,6 +1,8 @@
 import React from "react";
+import { Plus, FolderOpen, Save } from "lucide-react";
 import { Panel } from "../components/Panel";
 import { COLORS } from "../CONSTANTS/colors";
+import { PANEL } from "../CONSTANTS/panel";
 import { ModeSwitcher, AppMode } from "./ModeSwitcher";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
 
@@ -48,8 +50,8 @@ export const AppShell: React.FC<AppShellProps> = ({
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            paddingTop: "20px",
-            gap: "20px",
+            paddingTop: PANEL.SPACING.XL,
+            gap: PANEL.SPACING.XL,
             borderRadius: "10px",
           }}
         >
@@ -69,10 +71,9 @@ export const AppShell: React.FC<AppShellProps> = ({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: "18px"
             }}
           >
-            +
+            <Plus size={18} />
           </button>
           <button
             onClick={onOpenProject}
@@ -89,10 +90,9 @@ export const AppShell: React.FC<AppShellProps> = ({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: "14px"
             }}
           >
-            📂
+            <FolderOpen size={16} />
           </button>
           <button
             onClick={onSaveProject}
@@ -110,16 +110,15 @@ export const AppShell: React.FC<AppShellProps> = ({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: "14px"
             }}
           >
-            💾
+            <Save size={16} />
           </button>
 
           <div
             style={{
               marginTop: "auto",
-              marginBottom: "20px",
+              marginBottom: PANEL.SPACING.XL,
               width: "32px",
               height: "32px",
               borderRadius: "6px",

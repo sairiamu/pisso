@@ -1,4 +1,5 @@
 import React from "react";
+import { X, Plus } from "lucide-react";
 import { Panel } from "../components/Panel";
 import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
@@ -80,13 +81,13 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({
                     }}
                     style={{
                       color: COLORS.FOG,
-                      fontSize: "14px",
-                      lineHeight: 1,
                       cursor: "pointer",
-                      opacity: 0.6
+                      opacity: 0.6,
+                      display: "flex",
+                      alignItems: "center"
                     }}
                   >
-                    ×
+                    <X size={14} />
                   </span>
                 )}
               </div>
@@ -99,14 +100,15 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({
                 border: "none",
                 padding: "6px 10px",
                 cursor: "pointer",
-                fontSize: "18px",
-                fontWeight: "bold",
                 borderRadius: "4px",
-                marginBottom: "2px"
+                marginBottom: "2px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
               }}
               title="Add new file"
             >
-              +
+              <Plus size={18} />
             </button>
           </div>
 

@@ -14,6 +14,14 @@ export const PANEL = {
     RAW_COLOR: COLORS.SOLDER_COPPER,
     OPACITY: 0.15,
   },
+  SPACING: {
+    XS: "4px",
+    SM: "8px",
+    MD: "12px",
+    LG: "16px",
+    XL: "24px",
+    XXL: "32px",
+  },
 } as const;
 
 export type PanelConstants = typeof PANEL;

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react";
+import { X } from "lucide-react";
 import { Panel } from "../components/Panel";
 import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
@@ -74,11 +75,13 @@ export const BuildConsole: React.FC<BuildConsoleProps> = ({ output, onClose }) =
               border: "none",
               color: COLORS.FOG,
               cursor: "pointer",
-              fontSize: "16px",
               padding: "0 4px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
             }}
           >
-            ×
+            <X size={16} />
           </button>
         </div>
         <div
