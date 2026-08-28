@@ -8,6 +8,7 @@ import { TYPOGRAPHY } from "../CONSTANTS/typography";
 import { SimulationEngine } from "../simulator/engine";
 import { useSimulation } from "../simulator/SimulationContext";
 import { TerminalPanel } from "./TerminalPanel";
+import { GraphPanel } from "./GraphPanel";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -38,7 +39,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   isSimulating,
   onSimulateToggle,
 }) => {
-  const [showTerminal, setShowTerminal] = useState(false);
+  const [bottomPanel, setBottomPanel] = useState<'terminal' | 'graph' | null>(null);
   const [serialHeight, setSerialHeight] = useState(200);
   const [isResizing, setIsResizing] = useState(false);
   const engineRef = useRef<SimulationEngine | null>(null);
@@ -53,7 +54,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   // Automatically show terminal when build output arrives
   useEffect(() => {
     if (buildOutput) {
-      setShowTerminal(true);
+      setBottomPanel('terminal');
     }
   }, [buildOutput]);
 
@@ -261,9 +262,9 @@ export const AppShell: React.FC<AppShellProps> = ({
 
           <div style={{ display: "flex", gap: "10px" }}>
             <button
-              onClick={() => setShowTerminal(!showTerminal)}
+              onClick={() => setBottomPanel(bottomPanel === 'terminal' ? null : 'terminal')}
               style={{
-                backgroundColor: showTerminal ? COLORS.SOLDER_COPPER : COLORS.GRAPHITE_500,
+                backgroundColor: bottomPanel === 'terminal' ? COLORS.SOLDER_COPPER : COLORS.GRAPHITE_500,
                 color: COLORS.WARM_WHITE,
                 border: "none",
                 padding: "6px 16px",
@@ -278,8 +279,9 @@ export const AppShell: React.FC<AppShellProps> = ({
               TERMINAL
             </button>
             <button
+              onClick={() => setBottomPanel(bottomPanel === 'graph' ? null : 'graph')}
               style={{
-                backgroundColor: COLORS.GRAPHITE_500,
+                backgroundColor: bottomPanel === 'graph' ? COLORS.SOLDER_COPPER : COLORS.GRAPHITE_500,
                 color: COLORS.WARM_WHITE,
                 border: "none",
                 padding: "6px 16px",
@@ -287,7 +289,8 @@ export const AppShell: React.FC<AppShellProps> = ({
                 fontFamily: TYPOGRAPHY.UI,
                 fontSize: "12px",
                 fontWeight: 600,
-                cursor: "pointer"
+                cursor: "pointer",
+                transition: "background-color 0.2s ease"
               }}
             >
               GRAPH
@@ -330,7 +333,7 @@ export const AppShell: React.FC<AppShellProps> = ({
             {children}
           </div>
 
-          {showTerminal && (
+          {bottomPanel && (
             <div
               style={{
                 height: `${serialHeight}px`,
@@ -355,7 +358,11 @@ export const AppShell: React.FC<AppShellProps> = ({
                   transition: "background-color 0.2s ease"
                 }}
               />
-              <TerminalPanel onClose={() => setShowTerminal(false)} />
+              {bottomPanel === 'terminal' ? (
+                <TerminalPanel onClose={() => setBottomPanel(null)} />
+              ) : (
+                <GraphPanel onClose={() => setBottomPanel(null)} />
+              )}
             </div>
           )}
         </div>
