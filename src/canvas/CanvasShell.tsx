@@ -272,6 +272,8 @@ const CanvasInternal = forwardRef<CanvasShellHandle>((_, ref) => {
       <div
         ref={reactFlowWrapper}
         style={{ flex: 1, height: "100%", minHeight: "600px" }}
+        onDrop={onDrop}
+        onDragOver={onDragOver}
       >
         <ReactFlow
           nodes={nodes}
@@ -280,8 +282,6 @@ const CanvasInternal = forwardRef<CanvasShellHandle>((_, ref) => {
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onInit={setReactFlowInstance}
-          onDrop={onDrop}
-          onDragOver={onDragOver}
           onPaneContextMenu={onPaneContextMenu}
           nodeTypes={memoizedNodeTypes}
           edgeTypes={memoizedEdgeTypes}

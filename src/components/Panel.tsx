@@ -57,7 +57,16 @@ export const Panel: React.FC<PanelProps> = ({
           <Screw style={{ bottom: screwOffset, right: screwOffset }} />
         </>
       )}
-      <div style={{ position: "relative", zIndex: 1 }}>{children}</div>
+      <div style={{
+        position: "relative",
+        zIndex: 1,
+        height: "100%",
+        display: style?.display === "flex" ? "flex" : "block",
+        flexDirection: style?.flexDirection,
+        flex: style?.display === "flex" ? 1 : undefined,
+      }}>
+        {children}
+      </div>
     </div>
   );
 };

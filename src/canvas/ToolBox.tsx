@@ -13,26 +13,12 @@ const PartThumbnail: React.FC<{ part: PartDefinition; onClick: () => void }> = (
   onClick,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
-  const mouseDownPos = React.useRef<{ x: number; y: number } | null>(null);
 
   return (
     <div
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      onMouseDown={(e) => {
-        mouseDownPos.current = { x: e.clientX, y: e.clientY };
-      }}
-      onMouseUp={(e) => {
-        if (mouseDownPos.current) {
-          const dx = Math.abs(e.clientX - mouseDownPos.current.x);
-          const dy = Math.abs(e.clientY - mouseDownPos.current.y);
-          // Increased tolerance to 10px and added e.button check
-          if (dx < 10 && dy < 10 && e.button === 0) {
-            onClick();
-          }
-        }
-        mouseDownPos.current = null;
-      }}
+      onClick={onClick}
       draggable
       onDragStart={(e) => {
         e.dataTransfer.setData("application/reactflow", part.type);
