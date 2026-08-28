@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Plus, FolderOpen, Save } from "lucide-react";
 import { Panel } from "../components/Panel";
 import { COLORS } from "../CONSTANTS/colors";
@@ -7,6 +7,7 @@ import { ModeSwitcher, AppMode } from "./ModeSwitcher";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
 import { SimulationEngine } from "../simulator/engine";
 import { useSimulation } from "../simulator/SimulationContext";
+import { TerminalPanel } from "./TerminalPanel";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -37,8 +38,59 @@ export const AppShell: React.FC<AppShellProps> = ({
   isSimulating,
   onSimulateToggle,
 }) => {
+  const [showTerminal, setShowTerminal] = useState(false);
+  const [serialHeight, setSerialHeight] = useState(200);
+  const [isResizing, setIsResizing] = useState(false);
   const engineRef = useRef<SimulationEngine | null>(null);
-  const { setPinState, resetPinStates } = useSimulation();
+  const {
+    setPinState,
+    resetPinStates,
+    appendSerialOutput,
+    buildOutput,
+    setWriteSerialHandler
+  } = useSimulation();
+
+  // Automatically show terminal when build output arrives
+  useEffect(() => {
+    if (buildOutput) {
+      setShowTerminal(true);
+    }
+  }, [buildOutput]);
+
+  // Wire serial input handler
+  useEffect(() => {
+    setWriteSerialHandler((data: string) => {
+      if (engineRef.current) {
+        for (let i = 0; i < data.length; i++) {
+          engineRef.current.serialWrite(data.charCodeAt(i));
+        }
+      }
+    });
+  }, [setWriteSerialHandler]);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizing) return;
+    const newHeight = window.innerHeight - e.clientY - 16; // Subtract padding/margin
+    setSerialHeight(Math.max(100, Math.min(newHeight, window.innerHeight * 0.7)));
+  }, [isResizing]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  useEffect(() => {
+    if (isResizing) {
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+    } else {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizing, handleMouseMove, handleMouseUp]);
 
   useEffect(() => {
     if (!isSimulating && engineRef.current) {
@@ -71,6 +123,9 @@ export const AppShell: React.FC<AppShellProps> = ({
       const engine = SimulationEngine.fromHex(lastHex);
       engine.onPinChange = (pin, state) => {
         setPinState(pin, state);
+      };
+      engine.onUartByte = (byte) => {
+        appendSerialOutput(String.fromCharCode(byte));
       };
       engineRef.current = engine;
       engine.start();
@@ -206,8 +261,9 @@ export const AppShell: React.FC<AppShellProps> = ({
 
           <div style={{ display: "flex", gap: "10px" }}>
             <button
+              onClick={() => setShowTerminal(!showTerminal)}
               style={{
-                backgroundColor: COLORS.GRAPHITE_500,
+                backgroundColor: showTerminal ? COLORS.SOLDER_COPPER : COLORS.GRAPHITE_500,
                 color: COLORS.WARM_WHITE,
                 border: "none",
                 padding: "6px 16px",
@@ -215,10 +271,11 @@ export const AppShell: React.FC<AppShellProps> = ({
                 fontFamily: TYPOGRAPHY.UI,
                 fontSize: "12px",
                 fontWeight: 600,
-                cursor: "pointer"
+                cursor: "pointer",
+                transition: "background-color 0.2s ease"
               }}
             >
-              SERIAL
+              TERMINAL
             </button>
             <button
               style={{
@@ -264,10 +321,43 @@ export const AppShell: React.FC<AppShellProps> = ({
             borderRadius: "10px",
             overflow: "hidden",
             backgroundColor: COLORS.GRAPHITE_900,
-            position: "relative"
+            position: "relative",
+            display: "flex",
+            flexDirection: "column"
           }}
         >
-          {children}
+          <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
+            {children}
+          </div>
+
+          {showTerminal && (
+            <div
+              style={{
+                height: `${serialHeight}px`,
+                borderTop: `2px solid ${COLORS.GRAPHITE_500}`,
+                position: "relative",
+                zIndex: 20,
+                display: "flex",
+                flexDirection: "column"
+              }}
+            >
+              <div
+                onMouseDown={() => setIsResizing(true)}
+                style={{
+                  height: "4px",
+                  width: "100%",
+                  cursor: "ns-resize",
+                  position: "absolute",
+                  top: "-3px",
+                  left: 0,
+                  zIndex: 30,
+                  backgroundColor: isResizing ? COLORS.SOLDER_COPPER : "transparent",
+                  transition: "background-color 0.2s ease"
+                }}
+              />
+              <TerminalPanel onClose={() => setShowTerminal(false)} />
+            </div>
+          )}
         </div>
       </div>
     </div>

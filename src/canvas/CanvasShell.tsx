@@ -45,7 +45,7 @@ const CanvasInternal = forwardRef<CanvasShellHandle>((_, ref) => {
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
-  const { setPinMappings } = useSimulation();
+  const { setPinMappings, setSerialConnected } = useSimulation();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
   const onPaneContextMenu = useCallback(
@@ -208,6 +208,7 @@ const CanvasInternal = forwardRef<CanvasShellHandle>((_, ref) => {
     // Update simulation pin mappings
     const mappings: Record<string, (string | number)[]> = {};
     const unoPart = diagram.parts.find(p => p.type === 'arduino-uno');
+    let rxTxConnected = false;
 
     if (unoPart) {
       diagram.parts.forEach(part => {
@@ -221,13 +222,21 @@ const CanvasInternal = forwardRef<CanvasShellHandle>((_, ref) => {
 
             if (unoConnections.length > 0) {
               mappings[`${part.id}:${pin.name}`] = unoConnections;
+
+              // Check if RX(0) or TX(1) are connected to anything else besides the Uno itself
+              if (unoConnections.includes('0') || unoConnections.includes('1') || unoConnections.includes(0) || unoConnections.includes(1)) {
+                if (connectedPins.some(p => p.partId !== unoPart.id)) {
+                  rxTxConnected = true;
+                }
+              }
             }
           });
         }
       });
     }
     setPinMappings(mappings);
-  }, [nodes, edges, setEdges, setPinMappings]);
+    setSerialConnected(rxTxConnected);
+  }, [nodes, edges, setEdges, setPinMappings, setSerialConnected]);
 
   // Debug: log nodes to console
   useEffect(() => {

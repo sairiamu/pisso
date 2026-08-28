@@ -8,7 +8,6 @@ import { saveProject, loadProject } from "./diagram";
 import { ToolBox } from "./canvas/ToolBox";
 import { CodeEditor } from "./components/CodeEditor";
 import { EditorTabs } from "./canvas/EditorTabs";
-import { BuildConsole } from "./canvas/BuildConsole";
 import { useSimulation } from "./simulator/SimulationContext";
 
 export interface FileEntry {
@@ -40,9 +39,8 @@ function App() {
     { name: "sketch.ino", content: INITIAL_CODE }
   ]);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
-  const [buildOutput, setBuildOutput] = useState<string | null>(null);
+  const { isSimulating, setIsSimulating, setBuildOutput } = useSimulation();
   const [lastHex, setLastHex] = useState<string | null>(null);
-  const { isSimulating, setIsSimulating } = useSimulation();
   const [mode, setMode] = useState<AppMode>("design");
   const [debugStatus, setDebugStatus] = useState<string>("");
   const canvasRef = useRef<CanvasShellHandle>(null);
@@ -199,7 +197,6 @@ function App() {
         <div style={{ flex: 1, minHeight: 0 }}>
           <CodeEditor value={activeFile.content} onChange={handleCodeChange} />
         </div>
-        <BuildConsole output={buildOutput} onClose={() => setBuildOutput(null)} />
       </div>
     </AppShell>
   );
