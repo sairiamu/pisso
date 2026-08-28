@@ -1,10 +1,12 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { Plus, FolderOpen, Save } from "lucide-react";
 import { Panel } from "../components/Panel";
 import { COLORS } from "../CONSTANTS/colors";
 import { PANEL } from "../CONSTANTS/panel";
 import { ModeSwitcher, AppMode } from "./ModeSwitcher";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
+import { SimulationEngine } from "../simulator/engine";
+import { useSimulation } from "../simulator/SimulationContext";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -14,6 +16,9 @@ interface AppShellProps {
   onOpenProject?: () => void;
   onSaveProject?: () => void;
   saveDisabled?: boolean;
+  lastHex?: string | null;
+  isSimulating?: boolean;
+  onSimulateToggle?: (simulating: boolean) => void;
 }
 
 /**
@@ -27,8 +32,55 @@ export const AppShell: React.FC<AppShellProps> = ({
   onNewProject,
   onOpenProject,
   onSaveProject,
-  saveDisabled
+  saveDisabled,
+  lastHex,
+  isSimulating,
+  onSimulateToggle,
 }) => {
+  const engineRef = useRef<SimulationEngine | null>(null);
+  const { setPinState, resetPinStates } = useSimulation();
+
+  useEffect(() => {
+    if (!isSimulating && engineRef.current) {
+      engineRef.current.pause();
+      engineRef.current = null;
+      resetPinStates();
+    }
+
+    return () => {
+      if (engineRef.current) {
+        engineRef.current.pause();
+        engineRef.current = null;
+        resetPinStates();
+      }
+    };
+  }, [isSimulating, resetPinStates]);
+
+  const handleSimulate = () => {
+    if (isSimulating) {
+      onSimulateToggle?.(false);
+      return;
+    }
+
+    if (!lastHex) {
+      alert("No compiled hex available. Please compile your sketch first.");
+      return;
+    }
+
+    try {
+      const engine = SimulationEngine.fromHex(lastHex);
+      engine.onPinChange = (pin, state) => {
+        setPinState(pin, state);
+      };
+      engineRef.current = engine;
+      engine.start();
+      onSimulateToggle?.(true);
+    } catch (err) {
+      console.error("Failed to start simulation:", err);
+      alert("Simulation Error: " + err);
+    }
+  };
+
   return (
     <div
       style={{
@@ -184,8 +236,9 @@ export const AppShell: React.FC<AppShellProps> = ({
               GRAPH
             </button>
             <button
+              onClick={handleSimulate}
               style={{
-                backgroundColor: COLORS.SOLDER_COPPER,
+                backgroundColor: isSimulating ? COLORS.TRACE_GREEN : COLORS.SOLDER_COPPER,
                 color: COLORS.WARM_WHITE,
                 border: "none",
                 padding: "6px 20px",
@@ -194,10 +247,11 @@ export const AppShell: React.FC<AppShellProps> = ({
                 fontSize: "12px",
                 fontWeight: 700,
                 cursor: "pointer",
-                boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
+                boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                transition: "background-color 0.2s ease"
               }}
             >
-              SIMULATE
+              {isSimulating ? "STOP SIM" : "SIMULATE"}
             </button>
           </div>
         </div>

@@ -26,9 +26,6 @@ export const RESISTOR_DEFINITION: PartDefinition = {
   render: ({ attrs }) => (
     <div style={{ position: "relative", display: "inline-block" }}>
       {React.createElement("wokwi-resistor", attrs)}
-      {RESISTOR_PINS.map((pin) => (
-        <Pin key={pin.name} id={pin.name} x={pin.x} y={pin.y} />
-      ))}
     </div>
   ),
 };

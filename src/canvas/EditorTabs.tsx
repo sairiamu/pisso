@@ -14,6 +14,7 @@ interface EditorTabsProps {
   onAddTab: () => void;
   onCloseTab: (index: number) => void;
   onOutput?: (output: string) => void;
+  onCompileSuccess?: (hex: string) => void;
   onProjectPathChange?: (path: string) => void;
 }
 
@@ -28,6 +29,7 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({
   onAddTab,
   onCloseTab,
   onOutput,
+  onCompileSuccess,
   onProjectPathChange,
 }) => {
   return (
@@ -117,6 +119,7 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({
               projectPath={projectPath}
               code={files[0].content} // We compile the main sketch.ino for now
               onOutput={onOutput}
+              onCompileSuccess={onCompileSuccess}
               onProjectPathChange={onProjectPathChange}
             />
           </div>

@@ -12,7 +12,7 @@ import {
   timer1Config,
   timer2Config,
 } from 'avr8js';
-import TIntelHex from 'intel-hex';
+import { parse } from 'intel-hex';
 import { UNO_PIN_MAP } from './pinMap';
 
 export type PinState = 'HIGH' | 'LOW';
@@ -55,7 +55,7 @@ export class SimulationEngine {
    * Factory method to create an engine from an Intel Hex string.
    */
   public static fromHex(hex: string): SimulationEngine {
-    const buffer = TIntelHex.parse(hex).data;
+    const buffer = parse(hex).data;
     const flash = new Uint16Array(32768);
     for (let i = 0; i < buffer.length; i += 2) {
       flash[i / 2] = buffer[i] | (buffer[i + 1] << 8);

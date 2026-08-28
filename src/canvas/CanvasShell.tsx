@@ -22,6 +22,7 @@ import { InspectorPanel } from "./InspectorPanel";
 import { ProjectContextMenu } from "./ProjectContextMenu";
 import { resolveNode, Diagram, PartInstance } from "../diagram";
 import { PARTS_REGISTRY } from "../parts";
+import { useSimulation } from "../simulator/SimulationContext";
 import "../parts"; // Ensure all parts are registered
 
 const nodeTypes = {
@@ -44,6 +45,7 @@ const CanvasInternal = forwardRef<CanvasShellHandle>((_, ref) => {
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
+  const { setPinMappings } = useSimulation();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
   const onPaneContextMenu = useCallback(
@@ -202,7 +204,30 @@ const CanvasInternal = forwardRef<CanvasShellHandle>((_, ref) => {
     if (hasChanged) {
       setEdges(newEdges);
     }
-  }, [nodes, edges, setEdges]);
+
+    // Update simulation pin mappings
+    const mappings: Record<string, (string | number)[]> = {};
+    const unoPart = diagram.parts.find(p => p.type === 'arduino-uno');
+
+    if (unoPart) {
+      diagram.parts.forEach(part => {
+        const definition = PARTS_REGISTRY.get(part.type);
+        if (definition) {
+          definition.pins.forEach(pin => {
+            const connectedPins = resolveNode(diagram, { partId: part.id, pin: pin.name });
+            const unoConnections = connectedPins
+              .filter(p => p.partId === unoPart.id)
+              .map(p => p.pin);
+
+            if (unoConnections.length > 0) {
+              mappings[`${part.id}:${pin.name}`] = unoConnections;
+            }
+          });
+        }
+      });
+    }
+    setPinMappings(mappings);
+  }, [nodes, edges, setEdges, setPinMappings]);
 
   // Debug: log nodes to console
   useEffect(() => {

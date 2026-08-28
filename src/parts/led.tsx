@@ -23,14 +23,14 @@ export const LED_DEFINITION: PartDefinition = {
   category: "Basic",
   pins: LED_PINS,
   defaultAttrs: { color: "red" },
-  render: ({ attrs }) => (
-    <div style={{ position: "relative", display: "inline-block" }}>
-      {React.createElement("wokwi-led", attrs)}
-      {LED_PINS.map((pin) => (
-        <Pin key={pin.name} id={pin.name} x={pin.x} y={pin.y} />
-      ))}
-    </div>
-  ),
+  render: ({ attrs, pinValues }) => {
+    const isOn = pinValues?.anode === 'HIGH' && pinValues?.cathode === 'LOW';
+    return (
+      <div style={{ position: "relative", display: "inline-block" }}>
+        {React.createElement("wokwi-led", { ...attrs, value: isOn })}
+      </div>
+    );
+  },
 };
 
 registerPart(LED_DEFINITION);

@@ -7,6 +7,7 @@ interface RunButtonProps {
   projectPath: string | null;
   code: string;
   onOutput?: (output: string) => void;
+  onCompileSuccess?: (hex: string) => void;
   onProjectPathChange?: (path: string) => void;
 }
 
@@ -18,6 +19,7 @@ export const RunButton: React.FC<RunButtonProps> = ({
   projectPath,
   code,
   onOutput,
+  onCompileSuccess,
 }) => {
   const [isCompiling, setIsCompiling] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -45,14 +47,15 @@ export const RunButton: React.FC<RunButtonProps> = ({
 
       // 2. Invoke the compile command
       const sketchPath = `${activePath}/sketch.ino`;
-      const hexPath = await invoke<string>("compile_sketch", {
+      const hexContent = await invoke<string>("compile_sketch", {
         sketchPath,
         boardFqbn: "arduino:avr:uno",
       });
 
-      const successMsg = `Successfully compiled: ${hexPath.split(/[\\\/]/).pop()}`;
+      const successMsg = "Successfully compiled sketch";
       setStatus(successMsg);
       onOutput?.(successMsg);
+      onCompileSuccess?.(hexContent);
     } catch (err) {
       const errorMsg = String(err);
       setStatus(`Error: ${errorMsg.split("\n")[0]}`);

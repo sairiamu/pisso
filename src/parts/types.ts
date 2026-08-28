@@ -9,6 +9,9 @@ export interface PartDefinition {
   label: string; // e.g., "LED"
   category: string; // e.g., "Basic"
   pins: PartPin[]; // relative to part origin
-  render: (props: { attrs: Record<string, any> }) => JSX.Element;
+  render: (props: {
+    attrs: Record<string, any>;
+    pinValues?: Record<string, 'HIGH' | 'LOW' | 'FLOAT'>;
+  }) => JSX.Element;
   defaultAttrs: Record<string, any>;
 }

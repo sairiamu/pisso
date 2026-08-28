@@ -28,9 +28,6 @@ export const PUSHBUTTON_DEFINITION: PartDefinition = {
   render: ({ attrs }) => (
     <div style={{ position: "relative", display: "inline-block" }}>
       {React.createElement("wokwi-pushbutton", attrs)}
-      {PUSHBUTTON_PINS.map((pin) => (
-        <Pin key={pin.name} id={pin.name} x={pin.x} y={pin.y} />
-      ))}
     </div>
   ),
 };

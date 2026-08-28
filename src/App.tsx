@@ -9,6 +9,7 @@ import { ToolBox } from "./canvas/ToolBox";
 import { CodeEditor } from "./components/CodeEditor";
 import { EditorTabs } from "./canvas/EditorTabs";
 import { BuildConsole } from "./canvas/BuildConsole";
+import { useSimulation } from "./simulator/SimulationContext";
 
 export interface FileEntry {
   name: string;
@@ -40,6 +41,8 @@ function App() {
   ]);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [buildOutput, setBuildOutput] = useState<string | null>(null);
+  const [lastHex, setLastHex] = useState<string | null>(null);
+  const { isSimulating, setIsSimulating } = useSimulation();
   const [mode, setMode] = useState<AppMode>("design");
   const [debugStatus, setDebugStatus] = useState<string>("");
   const canvasRef = useRef<CanvasShellHandle>(null);
@@ -145,6 +148,9 @@ function App() {
       onOpenProject={handleOpen}
       onSaveProject={handleSave}
       saveDisabled={!projectPath}
+      lastHex={lastHex}
+      isSimulating={isSimulating}
+      onSimulateToggle={setIsSimulating}
     >
       {debugStatus && (
         <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 10000, background: 'black', color: 'white', padding: '8px 16px', borderRadius: 20, border: '1px solid #C97A4B' }}>
@@ -187,6 +193,7 @@ function App() {
           onAddTab={handleAddTab}
           onCloseTab={handleCloseTab}
           onOutput={setBuildOutput}
+          onCompileSuccess={setLastHex}
           onProjectPathChange={setProjectPath}
         />
         <div style={{ flex: 1, minHeight: 0 }}>

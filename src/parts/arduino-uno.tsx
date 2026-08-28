@@ -61,14 +61,6 @@ export const ARDUINO_UNO_DEFINITION: PartDefinition = {
     return (
       <div style={{ position: "relative", display: "inline-block" }}>
         {React.createElement("wokwi-arduino-uno", attrs)}
-        {UNO_PINS.map((pin) => (
-          <Pin
-            key={pin.name}
-            id={pin.name}
-            x={pin.x}
-            y={pin.y}
-          />
-        ))}
       </div>
     );
   },

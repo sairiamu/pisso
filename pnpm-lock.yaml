@@ -38,9 +38,15 @@ importers:
       '@xyflow/react':
         specifier: ^12.11.5
         version: 12.11.5(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      avr8js:
+        specifier: ^0.21.0
+        version: 0.21.0
       codemirror:
         specifier: ^6.0.2
         version: 6.0.2
+      intel-hex:
+        specifier: ^0.2.0
+        version: 0.2.0
       lucide-react:
         specifier: ^1.34.0
         version: 1.34.0(react@19.2.8)
@@ -675,6 +681,10 @@ packages:
   '@xyflow/system@0.0.81':
     resolution: {integrity: sha512-hfbafW4i7uLq7ILok8QWFFm4KMFw22lbZNJHKfHOMSOOoCk5e5m8yfr84UV9NaJajmogWaLVnp2XFU9JQejlqg==}
 
+  avr8js@0.21.0:
+    resolution: {integrity: sha512-kjFzxorERow5YFFV25ElhscG57TJqpT6M0m5GDDbXiMYoBmG6K99MQcq6AU1Ly4L+uB1g1o79dMmBNb5O+toxQ==}
+    engines: {node: '>= 20.19.0', npm: '>= 10.0.0'}
+
   baseline-browser-mapping@2.11.19:
     resolution: {integrity: sha512-Grytf1xOxOEMTGRwx6rLGKkTabd4vMg3VrKdj/7joCmV0qgh4QwMMO6xh34YEXQqirAuUdgQGa5orJQQ+69RBw==}
     engines: {node: '>=6.0.0'}
@@ -779,6 +789,9 @@ packages:
   gensync@1.0.0-beta.2:
     resolution: {integrity: sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==}
     engines: {node: '>=6.9.0'}
+
+  intel-hex@0.2.0:
+    resolution: {integrity: sha512-PJNkAm4N32VjcP7D14q1M+y/en/VlhqFyeaGiEhW/L9gPa7Lv+7vAcVlVBamKMfk6cZCcA9dTvHVXahcOxKzlw==}
 
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
@@ -1465,6 +1478,8 @@ snapshots:
       d3-selection: 3.0.0
       d3-zoom: 3.0.0
 
+  avr8js@0.21.0: {}
+
   baseline-browser-mapping@2.11.19: {}
 
   browserslist@4.28.8:
@@ -1576,6 +1591,8 @@ snapshots:
     optional: true
 
   gensync@1.0.0-beta.2: {}
+
+  intel-hex@0.2.0: {}
 
   js-tokens@4.0.0: {}
 

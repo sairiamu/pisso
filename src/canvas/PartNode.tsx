@@ -3,6 +3,7 @@ import { NodeProps, Handle, Position } from "@xyflow/react";
 import { PARTS_REGISTRY } from "../parts/registry";
 import { Pin } from "../components/Pin";
 import { COLORS } from "../CONSTANTS/colors";
+import { useSimulation } from "../simulator/SimulationContext";
 
 export type PartNodeData = {
   type: string;
@@ -11,6 +12,8 @@ export type PartNodeData = {
 };
 
 export const PartNode: React.FC<NodeProps> = React.memo((props) => {
+  const { pinStates, pinMappings, isSimulating } = useSimulation();
+
   try {
     const data = props.data as unknown as PartNodeData;
     if (!data || !data.type) {
@@ -36,6 +39,30 @@ export const PartNode: React.FC<NodeProps> = React.memo((props) => {
 
     const rotation = data.rotation || 0;
 
+    // Resolve pin values for simulation
+    const pinValues: Record<string, 'HIGH' | 'LOW' | 'FLOAT'> = {};
+    if (isSimulating) {
+      definition.pins.forEach(pin => {
+        const key = `${props.id}:${pin.name}`;
+        const mappedArduinoPins = pinMappings[key] || [];
+
+        // If connected to GND, it's LOW
+        if (mappedArduinoPins.some(p => String(p).toLowerCase().includes('gnd'))) {
+          pinValues[pin.name] = 'LOW';
+        } else {
+          // Check states of all connected Arduino pins
+          const states = mappedArduinoPins.map(p => pinStates[p]).filter(Boolean);
+          if (states.includes('HIGH')) {
+            pinValues[pin.name] = 'HIGH';
+          } else if (states.includes('LOW')) {
+            pinValues[pin.name] = 'LOW';
+          } else {
+            pinValues[pin.name] = 'FLOAT';
+          }
+        }
+      });
+    }
+
     return (
       <div
         className="pissow-part-node"
@@ -60,7 +87,7 @@ export const PartNode: React.FC<NodeProps> = React.memo((props) => {
           {definition.label}
         </div>
         <div style={{ pointerEvents: "none" }}>
-          {definition.render({ attrs: data.attrs || {} })}
+          {definition.render({ attrs: data.attrs || {}, pinValues })}
         </div>
         {definition.pins.map((pin) => (
           <Pin

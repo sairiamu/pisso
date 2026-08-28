@@ -219,7 +219,8 @@ async fn compile_sketch(
         return Err(String::from_utf8_lossy(&copy_output.stderr).to_string());
     }
 
-    Ok(output_hex.to_string_lossy().to_string())
+    let hex_content = fs::read_to_string(&output_hex).map_err(|e| e.to_string())?;
+    Ok(hex_content)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
