@@ -11,38 +11,37 @@ const PartThumbnail: React.FC<{ part: PartDefinition; onClick: () => void }> = (
   part,
   onClick,
 }) => {
+  const [isHovered, setIsHovered] = useState(false);
+
   return (
-    <button
-      onClick={onClick}
+    <div
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData("application/reactflow", part.type);
+        e.dataTransfer.effectAllowed = "move";
+      }}
       style={{
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
         padding: "16px 8px",
-        backgroundColor: COLORS.GRAPHITE_800,
-        border: `1px solid ${COLORS.GRAPHITE_500}`,
+        backgroundColor: isHovered ? COLORS.GRAPHITE_500 : COLORS.GRAPHITE_800,
+        border: `1px solid ${isHovered ? COLORS.SOLDER_COPPER : COLORS.GRAPHITE_500}`,
         borderRadius: "8px",
         color: COLORS.WARM_WHITE,
         cursor: "pointer",
-        transition: "all 0.2s ease-in-out",
+        transition: "all 0.1s ease-in-out",
         width: "100%",
         height: "120px",
         gap: "12px",
-        outline: "none",
-        boxSizing: "border-box",
         position: "relative",
-        overflow: "hidden"
-      }}
-      onMouseOver={(e) => {
-        e.currentTarget.style.backgroundColor = COLORS.GRAPHITE_500;
-        e.currentTarget.style.borderColor = COLORS.SOLDER_COPPER;
-        e.currentTarget.style.transform = "translateY(-2px)";
-      }}
-      onMouseOut={(e) => {
-        e.currentTarget.style.backgroundColor = COLORS.GRAPHITE_800;
-        e.currentTarget.style.borderColor = COLORS.GRAPHITE_500;
-        e.currentTarget.style.transform = "translateY(0)";
+        overflow: "hidden",
+        userSelect: "none",
+        transform: isHovered ? "translateY(-2px)" : "translateY(0)",
+        boxSizing: "border-box",
       }}
     >
       <div
@@ -74,18 +73,39 @@ const PartThumbnail: React.FC<{ part: PartDefinition; onClick: () => void }> = (
           fontWeight: 600,
           color: COLORS.WARM_WHITE,
           fontFamily: "Inter, sans-serif",
+          pointerEvents: "none",
         }}
       >
         {part.label}
       </span>
-    </button>
+
+      {/* Invisible layer to capture clicks regardless of content */}
+      <div
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onClick();
+        }}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 50,
+          cursor: "pointer",
+        }}
+      />
+    </div>
   );
 };
 
 export const ToolBox: React.FC<ToolBoxProps> = ({ onAddPart }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const allParts = useMemo(() => getRegisteredParts(), []);
+
+  // Stable reference to parts
+  const allParts = useMemo(() => getRegisteredParts(), [isOpen]);
 
   const filteredParts = useMemo(() => {
     const query = searchQuery.toLowerCase();
@@ -114,7 +134,7 @@ export const ToolBox: React.FC<ToolBoxProps> = ({ onAddPart }) => {
         position: "absolute",
         top: "16px",
         right: "16px",
-        zIndex: 1000,
+        zIndex: 2000, // Increased z-index
         display: "flex",
         flexDirection: "column",
         alignItems: "flex-end",
@@ -123,28 +143,30 @@ export const ToolBox: React.FC<ToolBoxProps> = ({ onAddPart }) => {
     >
       <button
         onClick={() => setIsOpen(!isOpen)}
-          style={{
-            backgroundColor: isOpen ? COLORS.SOLDER_COPPER : COLORS.GRAPHITE_700,
-            color: COLORS.WARM_WHITE,
-            border: `1px solid ${COLORS.GRAPHITE_500}`,
-            borderRadius: "8px",
-            padding: "10px 20px",
-            cursor: "pointer",
-            fontWeight: 700,
-            fontSize: "0.85rem",
-            textTransform: "uppercase",
-            letterSpacing: "0.05em",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-            transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-            fontFamily: "Inter, sans-serif",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            outline: "none"
-          }}
-        >
-          {isOpen ? "Close" : "ToolBox"}
-        </button>
+        style={{
+          backgroundColor: isOpen ? COLORS.SOLDER_COPPER : COLORS.GRAPHITE_700,
+          color: COLORS.WARM_WHITE,
+          border: `1px solid ${COLORS.GRAPHITE_500}`,
+          borderRadius: "8px",
+          padding: "10px 20px",
+          cursor: "pointer",
+          fontWeight: 700,
+          fontSize: "0.85rem",
+          textTransform: "uppercase",
+          letterSpacing: "0.05em",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+          transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+          fontFamily: "Inter, sans-serif",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          outline: "none",
+          position: "relative",
+          zIndex: 2001,
+        }}
+      >
+        {isOpen ? "Close" : "ToolBox"}
+      </button>
       {isOpen && (
         <Panel
           showScrews={true}
@@ -155,8 +177,9 @@ export const ToolBox: React.FC<ToolBoxProps> = ({ onAddPart }) => {
             flexDirection: "column",
             padding: "24px",
             boxSizing: "border-box",
-            boxShadow: "0 12px 48px rgba(0,0,0,0.6)",
+            boxShadow: "0 24px 64px rgba(0,0,0,0.7)",
             border: `1px solid ${COLORS.GRAPHITE_500}`,
+            backgroundColor: COLORS.GRAPHITE_700,
           }}
         >
           <div style={{ marginBottom: "20px" }}>

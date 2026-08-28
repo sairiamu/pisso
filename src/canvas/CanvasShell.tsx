@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback, useEffect, useState, useImperativeHandle, forwardRef } from "react";
+import React, { useMemo, useCallback, useEffect, useState, useImperativeHandle, forwardRef, useRef } from "react";
 import {
   ReactFlow,
   Background,
@@ -10,6 +10,8 @@ import {
   addEdge,
   Connection,
   ConnectionMode,
+  ReactFlowInstance,
+  ReactFlowProvider,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Panel } from "../components/Panel";
@@ -17,6 +19,7 @@ import { COLORS } from "../CONSTANTS/colors";
 import { PartNode } from "./PartNode";
 import { WireEdge } from "./WireEdge";
 import { InspectorPanel } from "./InspectorPanel";
+import { ProjectContextMenu } from "./ProjectContextMenu";
 import { resolveNode, Diagram, PartInstance } from "../diagram";
 import { PARTS_REGISTRY } from "../parts/registry";
 
@@ -34,9 +37,54 @@ export interface CanvasShellHandle {
   addPart: (type: string) => void;
 }
 
-export const CanvasShell = forwardRef<CanvasShellHandle>((_, ref) => {
+const CanvasInternal = forwardRef<CanvasShellHandle>((_, ref) => {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const reactFlowWrapper = useRef<HTMLDivElement>(null);
+
+  const onPaneContextMenu = useCallback(
+    (event: React.MouseEvent) => {
+      event.preventDefault();
+      setContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+      });
+    },
+    [setContextMenu]
+  );
+
+  const addPartInternal = useCallback((type: string, position?: { x: number, y: number }) => {
+    const definition = PARTS_REGISTRY.get(type);
+    if (!definition) {
+      console.warn(`Part definition not found for type: ${type}`);
+      return;
+    }
+
+    const id = `${type}-${Math.random().toString(36).substr(2, 9)}`;
+
+    setNodes((nds) => {
+      const pos = position || {
+        x: 100 + (nds.length * 25) % 300,
+        y: 100 + (nds.length * 25) % 300
+      };
+
+      return [
+        ...nds,
+        {
+          id,
+          type: "part",
+          position: pos,
+          data: {
+            type,
+            attrs: definition.defaultAttrs ? { ...definition.defaultAttrs } : {},
+            rotation: 0,
+          },
+        },
+      ];
+    });
+  }, [setNodes]);
 
   useImperativeHandle(
     ref,
@@ -78,34 +126,33 @@ export const CanvasShell = forwardRef<CanvasShellHandle>((_, ref) => {
           }))
         );
       },
-      addPart: (type: string) => {
-        const timestamp = Date.now();
-        const id = `${type}-${timestamp}`;
-        const definition = PARTS_REGISTRY.get(type);
-
-        setNodes((nds) => {
-          // StrictMode or double-click guard: don't add if ID already exists
-          if (nds.some((n) => n.id === id)) return nds;
-
-          return [
-            ...nds,
-            {
-              id,
-              type: "part",
-              position: { x: 100, y: 100 },
-              data: {
-                type,
-                attrs: definition?.defaultAttrs
-                  ? { ...definition.defaultAttrs }
-                  : {},
-                rotation: 0,
-              },
-            },
-          ];
-        });
-      },
+      addPart: (type: string) => addPartInternal(type),
     }),
-    [nodes, edges, setNodes, setEdges]
+    [nodes, edges, setNodes, setEdges, addPartInternal]
+  );
+
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }, []);
+
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
+
+      if (!reactFlowWrapper.current || !reactFlowInstance) return;
+
+      const type = event.dataTransfer.getData("application/reactflow");
+      if (!type) return;
+
+      const position = reactFlowInstance.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
+
+      addPartInternal(type, position);
+    },
+    [reactFlowInstance, addPartInternal]
   );
 
   // Validate connections and detect shorts
@@ -210,18 +257,24 @@ export const CanvasShell = forwardRef<CanvasShellHandle>((_, ref) => {
         flexDirection: "row",
       }}
     >
-      <div style={{ flex: 1, height: "100%", minHeight: "600px" }}>
+      <div
+        ref={reactFlowWrapper}
+        style={{ flex: 1, height: "100%", minHeight: "600px" }}
+      >
         <ReactFlow
           nodes={nodes}
           edges={edges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onInit={setReactFlowInstance}
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+          onPaneContextMenu={onPaneContextMenu}
           nodeTypes={memoizedNodeTypes}
           edgeTypes={memoizedEdgeTypes}
           connectionMode={ConnectionMode.Loose}
           colorMode="dark"
-          fitView
           deleteKeyCode={["Backspace", "Delete"]}
           style={{ backgroundColor: COLORS.GRAPHITE_900 }}
         >
@@ -240,6 +293,24 @@ export const CanvasShell = forwardRef<CanvasShellHandle>((_, ref) => {
           />
         </div>
       )}
+      {contextMenu && (
+        <ProjectContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          onShare={() => console.log("Share project")}
+          onRename={() => console.log("Rename project")}
+          onEdit={() => console.log("Edit project")}
+          onSubmit={() => console.log("Submit project")}
+          onDelete={() => console.log("Delete project")}
+        />
+      )}
     </Panel>
   );
 });
+
+export const CanvasShell = forwardRef<CanvasShellHandle>((props, ref) => (
+  <ReactFlowProvider>
+    <CanvasInternal {...props} ref={ref} />
+  </ReactFlowProvider>
+));

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { COLORS } from "./CONSTANTS/colors";
-import { getRegisteredParts } from "./parts";
 import { CanvasShell, CanvasShellHandle } from "./canvas/CanvasShell";
+import { AppShell } from "./canvas/AppShell";
+import { AppMode } from "./canvas/ModeSwitcher";
 import { saveProject, loadProject } from "./diagram";
 import { ToolBox } from "./canvas/ToolBox";
 import { CodeEditor } from "./components/CodeEditor";
@@ -39,6 +40,7 @@ function App() {
   ]);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [buildOutput, setBuildOutput] = useState<string | null>(null);
+  const [mode, setMode] = useState<AppMode>("design");
   const canvasRef = useRef<CanvasShellHandle>(null);
 
   const activeFile = files[activeFileIndex] || files[0];
@@ -122,69 +124,59 @@ function App() {
     );
   }
 
-  const parts = getRegisteredParts();
-
   return (
-    <main style={{
-      backgroundColor: COLORS.GRAPHITE_900,
-      height: "100vh",
-      width: "100vw",
-      display: "flex",
-      flexDirection: "column",
-      padding: "20px",
-      boxSizing: "border-box",
-      margin: 0,
-      color: COLORS.WARM_WHITE
-    }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-        <h1 style={{ margin: 0, fontFamily: "Inter, sans-serif" }}>
-          Pissow Workbench {projectPath ? ` - ${projectPath}` : "(No Project)"}
-        </h1>
-        <div style={{ display: "flex", gap: "10px" }}>
-          <button onClick={handleNewProject} style={{ padding: "8px 16px", cursor: "pointer" }}>New Project</button>
-          <button onClick={handleOpen} style={{ padding: "8px 16px", cursor: "pointer" }}>Open</button>
-          <button onClick={handleSave} disabled={!projectPath} style={{ padding: "8px 16px", cursor: "pointer" }}>Save</button>
-        </div>
-      </div>
-
-      <p style={{ color: COLORS.FOG, margin: "0 0 20px 0" }}>
-        Registered Parts: {parts.length} ({parts.map(p => p.label).join(", ")})
-      </p>
-
-      <div style={{ flex: 1, width: "100%", minHeight: 0, display: "flex", gap: "20px" }}>
-        <div style={{ flex: 2, position: "relative", minHeight: 0 }}>
+    <AppShell
+      mode={mode}
+      onModeChange={setMode}
+      onNewProject={handleNewProject}
+      onOpenProject={handleOpen}
+      onSaveProject={handleSave}
+      saveDisabled={!projectPath}
+    >
+      {/* Design Mode Content */}
+      <div
+        style={{
+          display: mode === "design" ? "flex" : "none",
+          height: "100%",
+          width: "100%",
+          position: "relative",
+          flexDirection: "row"
+        }}
+      >
+        <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
           <CanvasShell ref={canvasRef} />
           <ToolBox
             onAddPart={(type) => canvasRef.current?.addPart(type)}
           />
         </div>
-        <div style={{
-          flex: 1,
-          border: `1px solid ${COLORS.GRAPHITE_500}`,
-          borderRadius: "8px",
-          overflow: "hidden",
-          display: "flex",
-          flexDirection: "column",
-          backgroundColor: COLORS.GRAPHITE_900,
-          position: "relative"
-        }}>
-          <EditorTabs
-            projectPath={projectPath}
-            files={files}
-            activeFileIndex={activeFileIndex}
-            onSelectTab={setActiveFileIndex}
-            onAddTab={handleAddTab}
-            onCloseTab={handleCloseTab}
-            onOutput={setBuildOutput}
-            onProjectPathChange={setProjectPath}
-          />
-          <div style={{ flex: 1, minHeight: 0 }}>
-            <CodeEditor value={activeFile.content} onChange={handleCodeChange} />
-          </div>
-          <BuildConsole output={buildOutput} onClose={() => setBuildOutput(null)} />
-        </div>
       </div>
-    </main>
+
+      {/* Code Mode Content */}
+      <div
+        style={{
+          display: mode === "code" ? "flex" : "none",
+          height: "100%",
+          width: "100%",
+          flexDirection: "column",
+          position: "relative"
+        }}
+      >
+        <EditorTabs
+          projectPath={projectPath}
+          files={files}
+          activeFileIndex={activeFileIndex}
+          onSelectTab={setActiveFileIndex}
+          onAddTab={handleAddTab}
+          onCloseTab={handleCloseTab}
+          onOutput={setBuildOutput}
+          onProjectPathChange={setProjectPath}
+        />
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <CodeEditor value={activeFile.content} onChange={handleCodeChange} />
+        </div>
+        <BuildConsole output={buildOutput} onClose={() => setBuildOutput(null)} />
+      </div>
+    </AppShell>
   );
 }
 
