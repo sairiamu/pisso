@@ -2,6 +2,7 @@ import React from "react";
 import { NodeProps, Handle, Position } from "@xyflow/react";
 import { PARTS_REGISTRY } from "../parts/registry";
 import { Pin } from "../components/Pin";
+import { COLORS } from "../CONSTANTS/colors";
 
 export type PartNodeData = {
   type: string;
@@ -40,13 +41,27 @@ export const PartNode: React.FC<NodeProps> = React.memo((props) => {
         className="pissow-part-node"
         style={{
           position: "relative",
-          minWidth: 50,
-          minHeight: 50,
+          minWidth: "100px",
+          minHeight: "100px",
           transform: `rotate(${rotation}deg)`,
           transformOrigin: "center center",
+          padding: "20px",
+          backgroundColor: props.selected ? "rgba(201, 122, 75, 0.2)" : "rgba(60, 64, 72, 0.8)",
+          border: props.selected ? `2px solid ${COLORS.SOLDER_COPPER}` : `1px solid ${COLORS.GRAPHITE_500}`,
+          borderRadius: "8px",
+          boxShadow: "0 4px 6px rgba(0,0,0,0.3)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center"
         }}
       >
-        {definition.render({ attrs: data.attrs || {} })}
+        <div style={{ color: COLORS.WARM_WHITE, fontSize: "10px", marginBottom: "5px", opacity: 0.5 }}>
+          {definition.label}
+        </div>
+        <div style={{ pointerEvents: "none" }}>
+          {definition.render({ attrs: data.attrs || {} })}
+        </div>
         {definition.pins.map((pin) => (
           <Pin
             key={pin.name}

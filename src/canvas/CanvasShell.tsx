@@ -21,7 +21,8 @@ import { WireEdge } from "./WireEdge";
 import { InspectorPanel } from "./InspectorPanel";
 import { ProjectContextMenu } from "./ProjectContextMenu";
 import { resolveNode, Diagram, PartInstance } from "../diagram";
-import { PARTS_REGISTRY } from "../parts/registry";
+import { PARTS_REGISTRY } from "../parts";
+import "../parts"; // Ensure all parts are registered
 
 const nodeTypes = {
   part: PartNode,
@@ -42,6 +43,7 @@ const CanvasInternal = forwardRef<CanvasShellHandle>((_, ref) => {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [lastError, setLastError] = useState<string | null>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
   const onPaneContextMenu = useCallback(
@@ -56,34 +58,39 @@ const CanvasInternal = forwardRef<CanvasShellHandle>((_, ref) => {
   );
 
   const addPartInternal = useCallback((type: string, position?: { x: number, y: number }) => {
-    const definition = PARTS_REGISTRY.get(type);
-    if (!definition) {
-      console.warn(`Part definition not found for type: ${type}`);
-      return;
-    }
+    try {
+      const definition = PARTS_REGISTRY.get(type);
+      if (!definition) {
+        setLastError(`Part definition not found for type: ${type}`);
+        console.warn(`Part definition not found for type: ${type}`);
+        return;
+      }
 
-    const id = `${type}-${Math.random().toString(36).substr(2, 9)}`;
+      const id = `${type}-${Math.random().toString(36).substr(2, 9)}`;
 
-    setNodes((nds) => {
-      const pos = position || {
-        x: 100 + (nds.length * 25) % 300,
-        y: 100 + (nds.length * 25) % 300
+      const newNode: Node = {
+        id,
+        type: "part",
+        position: { x: 0, y: 0 }, // Will be updated
+        data: {
+          type,
+          attrs: definition.defaultAttrs ? { ...definition.defaultAttrs } : {},
+          rotation: 0,
+        },
       };
 
-      return [
-        ...nds,
-        {
-          id,
-          type: "part",
-          position: pos,
-          data: {
-            type,
-            attrs: definition.defaultAttrs ? { ...definition.defaultAttrs } : {},
-            rotation: 0,
-          },
-        },
-      ];
-    });
+      setNodes((nds) => {
+        const pos = position || {
+          x: 150 + (nds.length * 50) % 400,
+          y: 150 + (nds.length * 50) % 400
+        };
+        const updatedNode = { ...newNode, position: pos };
+        console.log("Adding node:", updatedNode);
+        return [...nds, updatedNode];
+      });
+    } catch (err) {
+      setLastError(String(err));
+    }
   }, [setNodes]);
 
   useImperativeHandle(
@@ -197,6 +204,11 @@ const CanvasInternal = forwardRef<CanvasShellHandle>((_, ref) => {
     }
   }, [nodes, edges, setEdges]);
 
+  // Debug: log nodes to console
+  useEffect(() => {
+    console.log("Current Canvas Nodes:", nodes);
+  }, [nodes]);
+
   const onConnect = useCallback(
     (params: Connection) => {
       const newEdge = {
@@ -283,6 +295,14 @@ const CanvasInternal = forwardRef<CanvasShellHandle>((_, ref) => {
             color={COLORS.GRAPHITE_500}
             gap={20}
           />
+          {lastError && (
+            <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 1000, background: 'red', color: 'white', padding: '4px 8px', borderRadius: 4 }}>
+              {lastError}
+            </div>
+          )}
+          <div style={{ position: 'absolute', bottom: 10, right: 10, zIndex: 1000, color: COLORS.FOG, fontSize: 10 }}>
+            Nodes: {nodes.length}
+          </div>
         </ReactFlow>
       </div>
       {selectedPart && (

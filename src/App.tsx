@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { COLORS } from "./CONSTANTS/colors";
 import { CanvasShell, CanvasShellHandle } from "./canvas/CanvasShell";
@@ -41,6 +41,7 @@ function App() {
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [buildOutput, setBuildOutput] = useState<string | null>(null);
   const [mode, setMode] = useState<AppMode>("design");
+  const [debugStatus, setDebugStatus] = useState<string>("");
   const canvasRef = useRef<CanvasShellHandle>(null);
 
   const activeFile = files[activeFileIndex] || files[0];
@@ -114,6 +115,18 @@ function App() {
     }
   };
 
+  const handleAddPart = useCallback((type: string) => {
+    console.log("App: Adding part", type);
+    setDebugStatus(`Adding ${type}...`);
+    if (canvasRef.current) {
+      canvasRef.current.addPart(type);
+      setDebugStatus(`Added ${type}`);
+    } else {
+      setDebugStatus("Error: canvasRef is null");
+    }
+    setTimeout(() => setDebugStatus(""), 2000);
+  }, []);
+
   if (error) {
     return (
       <div style={{ backgroundColor: "red", color: "white", padding: 20 }}>
@@ -133,6 +146,11 @@ function App() {
       onSaveProject={handleSave}
       saveDisabled={!projectPath}
     >
+      {debugStatus && (
+        <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 10000, background: 'black', color: 'white', padding: '8px 16px', borderRadius: 20, border: '1px solid #C97A4B' }}>
+          {debugStatus}
+        </div>
+      )}
       {/* Design Mode Content */}
       <div
         style={{
@@ -146,7 +164,7 @@ function App() {
         <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
           <CanvasShell ref={canvasRef} />
           <ToolBox
-            onAddPart={(type) => canvasRef.current?.addPart(type)}
+            onAddPart={handleAddPart}
           />
         </div>
       </div>
