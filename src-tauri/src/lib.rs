@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::io::{BufRead, BufReader, Write};
-use tauri::{Manager, Emitter};
+use tauri::{Manager, Emitter, path::BaseDirectory};
 use std::sync::Mutex;
 use serialport::SerialPort;
 
@@ -142,15 +142,20 @@ async fn compile_sketch(
 ) -> Result<String, String> {
     let config = get_board_config(&board_fqbn)?;
 
-    let resource_dir = app_handle
-        .path()
-        .resource_dir()
-        .map_err(|e| e.to_string())?;
+    let avr_toolchain = app_handle.path().resolve("resources/avr-toolchain", BaseDirectory::Resource)
+        .map_err(|e| format!("Failed to resolve avr-toolchain resource: {}", e))?;
+    let avr_toolchain = clean_path(avr_toolchain);
 
-    let resource_dir = clean_path(resource_dir);
+    let arduino_core = app_handle.path().resolve("resources/arduino-core", BaseDirectory::Resource)
+        .map_err(|e| format!("Failed to resolve arduino-core resource: {}", e))?;
+    let arduino_core = clean_path(arduino_core);
+
+    let arduino_variants_base = app_handle.path().resolve("resources/arduino-variants", BaseDirectory::Resource)
+        .map_err(|e| format!("Failed to resolve arduino-variants resource: {}", e))?;
+    let arduino_variants = clean_path(arduino_variants_base).join(config.variant);
+
     let sketch_path = clean_path(sketch_path);
-
-    let toolchain_bin = resource_dir.join("resources").join("avr-toolchain").join("bin");
+    let toolchain_bin = avr_toolchain.join("bin");
 
     #[cfg(windows)]
     let avr_gcc = toolchain_bin.join("avr-gcc.exe");
@@ -167,12 +172,21 @@ async fn compile_sketch(
     #[cfg(not(windows))]
     let avr_objcopy = toolchain_bin.join("avr-objcopy");
 
-    let arduino_core = resource_dir.join("resources").join("arduino-core");
-    let arduino_variants = resource_dir.join("resources").join("arduino-variants").join(config.variant);
-
     // Check if toolchain exists
     if !avr_gcc.exists() {
-        return Err(format!("avr-gcc not found at {}", avr_gcc.display()));
+        return Err(format!(
+            "avr-gcc not found at: {}\n\nToolchain resolved to: {}",
+            avr_gcc.display(),
+            avr_toolchain.display()
+        ));
+    }
+
+    if !arduino_core.exists() {
+        return Err(format!("Arduino core files not found at: {}", arduino_core.display()));
+    }
+
+    if !arduino_variants.exists() {
+        return Err(format!("Arduino variant '{}' not found at: {}", config.variant, arduino_variants.display()));
     }
 
     let build_cache = app_handle
@@ -321,15 +335,12 @@ async fn upload_hex(
 ) -> Result<(), String> {
     let config = get_board_config(&board_fqbn)?;
 
-    let resource_dir = app_handle
-        .path()
-        .resource_dir()
-        .map_err(|e| e.to_string())?;
+    let avr_toolchain = app_handle.path().resolve("resources/avr-toolchain", BaseDirectory::Resource)
+        .map_err(|e| format!("Failed to resolve avr-toolchain resource: {}", e))?;
+    let avr_toolchain = clean_path(avr_toolchain);
 
-    let resource_dir = clean_path(resource_dir);
     let hex_path = clean_path(hex_path);
-
-    let toolchain_bin = resource_dir.join("resources").join("avr-toolchain").join("bin");
+    let toolchain_bin = avr_toolchain.join("bin");
 
     #[cfg(windows)]
     let avrdude = toolchain_bin.join("avrdude.exe");
@@ -338,13 +349,28 @@ async fn upload_hex(
 
     // avrdude.conf is usually bundled in the same bin folder or etc/
     let mut avrdude_conf = toolchain_bin.join("avrdude.conf");
+    let mut tried_conf_paths = vec![avrdude_conf.clone()];
+
     if !avrdude_conf.exists() {
         // Fallback to etc/avrdude.conf if not in bin
-        avrdude_conf = toolchain_bin.parent().unwrap().join("etc").join("avrdude.conf");
+        avrdude_conf = avr_toolchain.join("etc").join("avrdude.conf");
+        tried_conf_paths.push(avrdude_conf.clone());
     }
 
     if !avrdude.exists() {
-        return Err(format!("avrdude not found at {}", avrdude.display()));
+        return Err(format!(
+            "avrdude not found at: {}\n\nToolchain resolved to: {}",
+            avrdude.display(),
+            avr_toolchain.display()
+        ));
+    }
+
+    if !avrdude_conf.exists() {
+        let paths_str = tried_conf_paths.iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        return Err(format!("avrdude.conf not found. Tried paths:\n{}", paths_str));
     }
 
     let mut cmd = Command::new(&avrdude);

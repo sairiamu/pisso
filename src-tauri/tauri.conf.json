@@ -32,9 +32,9 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "resources/avr-toolchain/**/*",
-      "resources/arduino-core/**/*",
-      "resources/arduino-variants/**/*"
+      "resources/avr-toolchain",
+      "resources/arduino-core",
+      "resources/arduino-variants"
     ]
   }
 }
