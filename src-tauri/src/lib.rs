@@ -1,8 +1,14 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use tauri::{Manager, Emitter};
+use std::sync::Mutex;
+use serialport::SerialPort;
+
+pub struct AppState {
+    pub serial_port: Mutex<Option<Box<dyn SerialPort>>>,
+}
 
 /// GNU tools on Windows often choke on the Verbatim prefix (\\?\)
 /// provided by Rust's canonicalize() or Tauri's path resolvers.
@@ -351,11 +357,74 @@ async fn upload_hex(
     }
 }
 
+#[tauri::command]
+fn open_serial(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<AppState>,
+    port_name: String,
+    baud_rate: u32,
+) -> Result<(), String> {
+    let mut port_lock = state.serial_port.lock().map_err(|e| e.to_string())?;
+
+    // Close existing
+    *port_lock = None;
+
+    let port = serialport::new(port_name, baud_rate)
+        .timeout(std::time::Duration::from_millis(100))
+        .open()
+        .map_err(|e| e.to_string())?;
+
+    let mut port_clone = port.try_clone().map_err(|e| e.to_string())?;
+    *port_lock = Some(port);
+
+    let handle = app_handle.clone();
+    std::thread::spawn(move || {
+        let mut buffer = [0u8; 1024];
+        loop {
+            match port_clone.read(&mut buffer) {
+                Ok(bytes_read) if bytes_read > 0 => {
+                    let data = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
+                    let _ = handle.emit("serial-data", data);
+                }
+                Ok(_) => {}
+                Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                    // Just a timeout, continue unless the port is dropped
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+fn close_serial(state: tauri::State<AppState>) -> Result<(), String> {
+    let mut port_lock = state.serial_port.lock().map_err(|e| e.to_string())?;
+    *port_lock = None;
+    Ok(())
+}
+
+#[tauri::command]
+fn write_to_serial(state: tauri::State<AppState>, data: String) -> Result<(), String> {
+    let mut port_lock = state.serial_port.lock().map_err(|e| e.to_string())?;
+    if let Some(port) = port_lock.as_mut() {
+        port.write_all(data.as_bytes()).map_err(|e| e.to_string())?;
+        port.flush().map_err(|e| e.to_string())?;
+    } else {
+        return Err("Serial port not open".into());
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .manage(AppState {
+            serial_port: Mutex::new(None),
+        })
         .invoke_handler(tauri::generate_handler![
             save_diagram,
             save_sketch,
@@ -363,7 +432,10 @@ pub fn run() {
             compile_sketch,
             upload_hex,
             get_playground_path,
-            list_serial_ports
+            list_serial_ports,
+            open_serial,
+            close_serial,
+            write_to_serial
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

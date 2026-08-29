@@ -39,7 +39,7 @@ function App() {
     { name: "sketch.ino", content: INITIAL_CODE }
   ]);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
-  const { isSimulating, setIsSimulating, setBuildOutput } = useSimulation();
+  const { isSimulating, setIsSimulating, setBuildOutput, appendBuildOutput } = useSimulation();
   const [lastHex, setLastHex] = useState<string | null>(null);
   const [mode, setMode] = useState<AppMode>("design");
   const [debugStatus, setDebugStatus] = useState<string>("");
@@ -193,7 +193,7 @@ function App() {
           onSelectTab={setActiveFileIndex}
           onAddTab={handleAddTab}
           onCloseTab={handleCloseTab}
-          onOutput={setBuildOutput}
+          onOutput={appendBuildOutput}
           onCompileSuccess={setLastHex}
           onProjectPathChange={setProjectPath}
         />

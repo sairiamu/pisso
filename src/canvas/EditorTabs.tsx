@@ -13,7 +13,7 @@ interface EditorTabsProps {
   onSelectTab: (index: number) => void;
   onAddTab: () => void;
   onCloseTab: (index: number) => void;
-  onOutput?: (output: string) => void;
+  onOutput?: (output: string | null) => void;
   onCompileSuccess?: (hex: string) => void;
   onProjectPathChange?: (path: string) => void;
 }

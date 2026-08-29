@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import { Plus, FolderOpen, Save } from "lucide-react";
 import { Panel } from "../components/Panel";
 import { COLORS } from "../CONSTANTS/colors";
@@ -57,9 +58,14 @@ export const AppShell: React.FC<AppShellProps> = ({
     setPinState,
     resetPinStates,
     appendSerialOutput,
+    clearSerialOutput,
     buildOutput,
     setBuildOutput,
-    setWriteSerialHandler
+    appendBuildOutput,
+    setWriteSerialHandler,
+    serialSource,
+    setSerialSource,
+    setSerialConnected
   } = useSimulation();
 
   // Listen for native upload progress events
@@ -67,13 +73,35 @@ export const AppShell: React.FC<AppShellProps> = ({
     let unlisten: (() => void) | null = null;
 
     listen<string>("upload-progress", (event) => {
-      setBuildOutput(prev => (prev || "") + event.payload + "\n");
+      appendBuildOutput(event.payload);
     }).then(u => { unlisten = u; });
 
     return () => {
       if (unlisten) unlisten();
     };
-  }, [setBuildOutput]);
+  }, [appendBuildOutput]);
+
+  // Listen for native serial data events
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+
+    listen<string>("serial-data", (event) => {
+      if (serialSource === 'hardware') {
+        appendSerialOutput(event.payload);
+      }
+    }).then(u => { unlisten = u; });
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [appendSerialOutput, serialSource]);
+
+  // Close hardware serial on unmount
+  useEffect(() => {
+    return () => {
+      invoke("close_serial").catch(() => {});
+    };
+  }, []);
 
   // Automatically show terminal when build output arrives
   useEffect(() => {
@@ -85,13 +113,19 @@ export const AppShell: React.FC<AppShellProps> = ({
   // Wire serial input handler
   useEffect(() => {
     setWriteSerialHandler((data: string) => {
-      if (engineRef.current) {
-        for (let i = 0; i < data.length; i++) {
-          engineRef.current.serialWrite(data.charCodeAt(i));
+      if (serialSource === 'simulation') {
+        if (engineRef.current) {
+          for (let i = 0; i < data.length; i++) {
+            engineRef.current.serialWrite(data.charCodeAt(i));
+          }
         }
+      } else {
+        invoke("write_to_serial", { data }).catch(err => {
+          console.error("Failed to write to hardware serial:", err);
+        });
       }
     });
-  }, [setWriteSerialHandler]);
+  }, [setWriteSerialHandler, serialSource]);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizing) return;
@@ -122,6 +156,7 @@ export const AppShell: React.FC<AppShellProps> = ({
       engineRef.current.pause();
       engineRef.current = null;
       resetPinStates();
+      setSerialConnected(false);
     }
 
     return () => {
@@ -129,11 +164,12 @@ export const AppShell: React.FC<AppShellProps> = ({
         engineRef.current.pause();
         engineRef.current = null;
         resetPinStates();
+        setSerialConnected(false);
       }
     };
-  }, [isSimulating, resetPinStates]);
+  }, [isSimulating, resetPinStates, setSerialConnected]);
 
-  const handleSimulate = () => {
+  const handleSimulate = async () => {
     if (isSimulating) {
       onSimulateToggle?.(false);
       return;
@@ -143,6 +179,17 @@ export const AppShell: React.FC<AppShellProps> = ({
       alert("No compiled hex available. Please compile your sketch first.");
       return;
     }
+
+    // Stop hardware serial before starting simulation
+    if (serialSource === 'hardware') {
+      try {
+        await invoke("close_serial");
+      } catch (err) {
+        console.error("Failed to close hardware serial:", err);
+      }
+    }
+    clearSerialOutput();
+    setSerialSource('simulation');
 
     try {
       const engine = SimulationEngine.fromHex(lastHex);
@@ -154,12 +201,33 @@ export const AppShell: React.FC<AppShellProps> = ({
       };
       engineRef.current = engine;
       engine.start();
+      setSerialConnected(true);
       onSimulateToggle?.(true);
     } catch (err) {
       console.error("Failed to start simulation:", err);
       alert("Simulation Error: " + err);
     }
   };
+
+  const handleUploadSuccess = useCallback(async () => {
+    // Stop simulation if running
+    if (isSimulating) {
+      onSimulateToggle?.(false);
+    }
+
+    clearSerialOutput();
+    // Switch to hardware serial
+    setSerialSource('hardware');
+    if (selectedPort) {
+      try {
+        await invoke("open_serial", { portName: selectedPort, baudRate: 115200 });
+        setSerialConnected(true);
+      } catch (err) {
+        console.error("Failed to open hardware serial:", err);
+        appendBuildOutput(`Error opening serial port: ${err}`);
+      }
+    }
+  }, [isSimulating, onSimulateToggle, selectedPort, setSerialSource, setSerialConnected, appendBuildOutput]);
 
   return (
     <div
@@ -349,7 +417,8 @@ export const AppShell: React.FC<AppShellProps> = ({
               hasHex={!!lastHex}
               code={activeCode || ""}
               onCompileSuccess={onCompileSuccess}
-              onOutput={setBuildOutput}
+              onOutput={appendBuildOutput}
+              onUploadSuccess={handleUploadSuccess}
             />
           </div>
         </div>

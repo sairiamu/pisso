@@ -6,7 +6,7 @@ import { writeSketch } from "../diagram/sketch";
 interface RunButtonProps {
   projectPath: string | null;
   code: string;
-  onOutput?: (output: string) => void;
+  onOutput?: (output: string | null) => void;
   onCompileSuccess?: (hex: string) => void;
   onProjectPathChange?: (path: string) => void;
 }
@@ -39,6 +39,7 @@ export const RunButton: React.FC<RunButtonProps> = ({
 
     setIsCompiling(true);
     setStatus("Compiling...");
+    onOutput?.(null); // Clear previous output
     onOutput?.("Compiling sketch...");
 
     try {

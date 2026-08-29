@@ -26,7 +26,8 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ onClose }) => {
     setBuildOutput,
     writeSerial,
     serialConnected,
-    isSimulating
+    isSimulating,
+    serialSource
   } = useSimulation();
 
   const [activeTab, setActiveTab] = useState<TerminalTabType>("output");
@@ -92,7 +93,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ onClose }) => {
     }
   };
 
-  const isActiveSerial = isSimulating && serialConnected;
+  const isActiveSerial = serialConnected;
 
   return (
     <Panel

@@ -11,7 +11,8 @@ interface UploadButtonProps {
   hasHex: boolean;
   code: string;
   onCompileSuccess?: (hex: string) => void;
-  onOutput?: (output: string) => void;
+  onOutput?: (output: string | null) => void;
+  onUploadSuccess?: () => void;
 }
 
 export const UploadButton: React.FC<UploadButtonProps> = ({
@@ -21,6 +22,7 @@ export const UploadButton: React.FC<UploadButtonProps> = ({
   code,
   onCompileSuccess,
   onOutput,
+  onUploadSuccess,
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -35,6 +37,7 @@ export const UploadButton: React.FC<UploadButtonProps> = ({
     }
 
     setIsProcessing(true);
+    onOutput?.(null); // Clear previous output
     onOutput?.(`Preparing upload to ${selectedPort}...`);
 
     try {
@@ -69,6 +72,7 @@ export const UploadButton: React.FC<UploadButtonProps> = ({
       });
 
       onOutput?.("UPLOAD SUCCESSFUL! Your board should be running the new code.");
+      onUploadSuccess?.();
     } catch (err) {
       onOutput?.(`UPLOAD FAILED: ${err}`);
     } finally {
