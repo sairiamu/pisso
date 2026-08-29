@@ -17,14 +17,6 @@ interface InternalPin {
   y: string | number;
 }
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-show-pins": any;
-    }
-  }
-}
-
 export const PartNode: React.FC<NodeProps> = React.memo((props) => {
   const { pinStates, pinMappings, isSimulating } = useSimulation();
   const [pins, setPins] = useState<InternalPin[]>([]);

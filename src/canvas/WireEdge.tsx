@@ -2,13 +2,11 @@ import React from "react";
 import {
   BaseEdge,
   EdgeProps,
-  getSmoothStepPath,
-  Position
+  getSmoothStepPath
 } from "@xyflow/react";
 import { COLORS } from "../CONSTANTS/colors";
 
 export const WireEdge: React.FC<EdgeProps> = ({
-  id,
   sourceX,
   sourceY,
   targetX,

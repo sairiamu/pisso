@@ -3,14 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-rotary-dialer": any;
-    }
-  }
-}
-
 export const ROTARY_DIALER_DEFINITION: PartDefinition = {
   type: "wokwi-rotary-dialer",
   label: "Rotary Dialer",

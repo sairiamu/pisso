@@ -3,14 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-rgb-led": any;
-    }
-  }
-}
-
 export const RGB_LED_DEFINITION: PartDefinition = {
   type: "wokwi-rgb-led",
   label: "RGB LED",

@@ -3,14 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-photoresistor-sensor": any;
-    }
-  }
-}
-
 export const PHOTORESISTOR_DEFINITION: PartDefinition = {
   type: "wokwi-photoresistor-sensor",
   label: "Photoresistor (LDR)",

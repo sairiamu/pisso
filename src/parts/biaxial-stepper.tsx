@@ -3,14 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-biaxial-stepper": any;
-    }
-  }
-}
-
 export const BIAXIAL_STEPPER_DEFINITION: PartDefinition = {
   type: "wokwi-biaxial-stepper",
   label: "Biaxial Stepper Motor",

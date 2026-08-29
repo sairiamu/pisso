@@ -3,14 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-tilt-switch": any;
-    }
-  }
-}
-
 export const TILT_SWITCH_DEFINITION: PartDefinition = {
   type: "wokwi-tilt-switch",
   label: "Tilt Switch",

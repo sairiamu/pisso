@@ -14,23 +14,25 @@ const PartThumbnail: React.FC<{ part: PartDefinition; onClick: () => void }> = (
 }) => {
   const [isHovered, setIsHovered] = useState(false);
 
+  const onDragStart = (event: React.DragEvent) => {
+    event.dataTransfer.setData("application/reactflow", part.type);
+    event.dataTransfer.effectAllowed = "move";
+  };
+
   return (
     <div
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={onClick}
       draggable
-      onDragStart={(e) => {
-        e.dataTransfer.setData("application/reactflow", part.type);
-        e.dataTransfer.effectAllowed = "move";
-      }}
+      onDragStart={onDragStart}
       style={{
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
         padding: `${PANEL.SPACING.LG} ${PANEL.SPACING.MD}`,
-        backgroundColor: isHovered ? COLORS.GRAPHITE_500 : COLORS.GRAPHITE_800,
+        backgroundColor: isHovered ? COLORS.GRAPHITE_500 : COLORS.GRAPHITE_900,
         border: `1px solid ${isHovered ? COLORS.SOLDER_COPPER : COLORS.GRAPHITE_500}`,
         borderRadius: "8px",
         color: COLORS.WARM_WHITE,

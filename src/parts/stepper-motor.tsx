@@ -3,14 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-stepper-motor": any;
-    }
-  }
-}
-
 export const STEPPER_MOTOR_DEFINITION: PartDefinition = {
   type: "wokwi-stepper-motor",
   label: "Stepper Motor",

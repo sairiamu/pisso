@@ -3,14 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-ir-receiver": any;
-    }
-  }
-}
-
 export const IR_RECEIVER_DEFINITION: PartDefinition = {
   type: "wokwi-ir-receiver",
   label: "IR Receiver",

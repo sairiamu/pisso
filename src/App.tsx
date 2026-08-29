@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { COLORS } from "./CONSTANTS/colors";
 import { CanvasShell, CanvasShellHandle } from "./canvas/CanvasShell";
 import { AppShell } from "./canvas/AppShell";
 import { AppMode } from "./canvas/ModeSwitcher";
@@ -39,7 +38,7 @@ function App() {
     { name: "sketch.ino", content: INITIAL_CODE }
   ]);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
-  const { isSimulating, setIsSimulating, setBuildOutput, appendBuildOutput } = useSimulation();
+  const { isSimulating, setIsSimulating, appendBuildOutput } = useSimulation();
   const [lastHex, setLastHex] = useState<string | null>(null);
   const [mode, setMode] = useState<AppMode>("design");
   const [debugStatus, setDebugStatus] = useState<string>("");

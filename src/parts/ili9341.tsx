@@ -3,14 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-ili9341": any;
-    }
-  }
-}
-
 export const ILI9341_DEFINITION: PartDefinition = {
   type: "wokwi-ili9341",
   label: "ILI9341 TFT LCD",

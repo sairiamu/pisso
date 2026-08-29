@@ -3,14 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-ky-040": any;
-    }
-  }
-}
-
 export const KY_040_DEFINITION: PartDefinition = {
   type: "wokwi-ky-040",
   label: "Rotary Encoder (KY-040)",

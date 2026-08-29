@@ -3,14 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-7segment": any;
-    }
-  }
-}
-
 export const SEVEN_SEGMENT_DEFINITION: PartDefinition = {
   type: "wokwi-7segment",
   label: "7 Segment Display",

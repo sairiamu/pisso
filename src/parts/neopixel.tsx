@@ -3,14 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-neopixel": any;
-    }
-  }
-}
-
 export const NEOPIXEL_DEFINITION: PartDefinition = {
   type: "wokwi-neopixel",
   label: "NeoPixel LED",

@@ -3,14 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-analog-joystick": any;
-    }
-  }
-}
-
 export const ANALOG_JOYSTICK_DEFINITION: PartDefinition = {
   type: "wokwi-analog-joystick",
   label: "Analog Joystick",

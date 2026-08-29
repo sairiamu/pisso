@@ -3,14 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-slide-switch": any;
-    }
-  }
-}
-
 export const SLIDE_SWITCH_DEFINITION: PartDefinition = {
   type: "wokwi-slide-switch",
   label: "Slide Switch",

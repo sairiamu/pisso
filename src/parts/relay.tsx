@@ -3,14 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-ks2e-m-dc5": any;
-    }
-  }
-}
-
 export const RELAY_DEFINITION: PartDefinition = {
   type: "wokwi-ks2e-m-dc5",
   label: "Relay (KS2E-M-DC5)",

@@ -3,14 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-pushbutton": any;
-    }
-  }
-}
-
 export const PUSHBUTTON_DEFINITION: PartDefinition = {
   type: "wokwi-pushbutton",
   label: "Pushbutton",

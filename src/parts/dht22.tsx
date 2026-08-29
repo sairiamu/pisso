@@ -3,14 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-dht22": any;
-    }
-  }
-}
-
 export const DHT22_DEFINITION: PartDefinition = {
   type: "wokwi-dht22",
   label: "DHT22 Temperature/Humidity Sensor",

@@ -3,14 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-slide-potentiometer": any;
-    }
-  }
-}
-
 export const SLIDE_POTENTIOMETER_DEFINITION: PartDefinition = {
   type: "wokwi-slide-potentiometer",
   label: "Slide Potentiometer",

@@ -3,14 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-ssd1306": any;
-    }
-  }
-}
-
 export const SSD1306_DEFINITION: PartDefinition = {
   type: "wokwi-ssd1306",
   label: "SSD1306 OLED Display",

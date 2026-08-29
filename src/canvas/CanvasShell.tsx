@@ -49,11 +49,11 @@ const CanvasInternal = forwardRef<CanvasShellHandle>((_, ref) => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
   const onPaneContextMenu = useCallback(
-    (event: React.MouseEvent) => {
+    (event: React.MouseEvent | MouseEvent) => {
       event.preventDefault();
       setContextMenu({
-        x: event.clientX,
-        y: event.clientY,
+        x: (event as any).clientX,
+        y: (event as any).clientY,
       });
     },
     [setContextMenu]
@@ -214,17 +214,24 @@ const CanvasInternal = forwardRef<CanvasShellHandle>((_, ref) => {
       diagram.parts.forEach(part => {
         const definition = PARTS_REGISTRY.get(part.type);
         if (definition) {
-          definition.pins.forEach(pin => {
-            const connectedPins = resolveNode(diagram, { partId: part.id, pin: pin.name });
+          // Find all unique pins of this part that have connections in the edges
+          const connectedPinNames = new Set<string>();
+          edges.forEach(edge => {
+            if (edge.source === part.id && edge.sourceHandle) connectedPinNames.add(edge.sourceHandle);
+            if (edge.target === part.id && edge.targetHandle) connectedPinNames.add(edge.targetHandle);
+          });
+
+          connectedPinNames.forEach(pinName => {
+            const connectedPins = resolveNode(diagram, { partId: part.id, pin: pinName });
             const unoConnections = connectedPins
               .filter(p => p.partId === unoPart.id)
               .map(p => p.pin);
 
             if (unoConnections.length > 0) {
-              mappings[`${part.id}:${pin.name}`] = unoConnections;
+              mappings[`${part.id}:${pinName}`] = unoConnections;
 
               // Check if RX(0) or TX(1) are connected to anything else besides the Uno itself
-              if (unoConnections.includes('0') || unoConnections.includes('1') || unoConnections.includes(0) || unoConnections.includes(1)) {
+              if (unoConnections.includes('0') || unoConnections.includes('1')) {
                 if (connectedPins.some(p => p.partId !== unoPart.id)) {
                   rxTxConnected = true;
                 }
@@ -245,12 +252,14 @@ const CanvasInternal = forwardRef<CanvasShellHandle>((_, ref) => {
 
   const onConnect = useCallback(
     (params: Connection) => {
-      const newEdge = {
+      const newEdge: Edge = {
         ...params,
         type: "wire",
         id: `w-${Date.now()}`,
-        data: { isShorted: false }
-      };
+        data: { isShorted: false },
+        source: params.source || "",
+        target: params.target || "",
+      } as Edge;
       setEdges((eds) => addEdge(newEdge, eds));
     },
     [setEdges]

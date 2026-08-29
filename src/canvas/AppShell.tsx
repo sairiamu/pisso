@@ -60,7 +60,6 @@ export const AppShell: React.FC<AppShellProps> = ({
     appendSerialOutput,
     clearSerialOutput,
     buildOutput,
-    setBuildOutput,
     appendBuildOutput,
     setWriteSerialHandler,
     serialSource,

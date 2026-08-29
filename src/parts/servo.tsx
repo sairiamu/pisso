@@ -3,14 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-servo": any;
-    }
-  }
-}
-
 export const SERVO_DEFINITION: PartDefinition = {
   type: "wokwi-servo",
   label: "Servo Motor",

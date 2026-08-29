@@ -5,6 +5,6 @@ export interface PartDefinition {
   render: (props: {
     attrs: Record<string, any>;
     pinValues?: Record<string, 'HIGH' | 'LOW' | 'FLOAT'>;
-  }) => JSX.Element;
+  }) => React.JSX.Element;
   defaultAttrs: Record<string, any>;
 }

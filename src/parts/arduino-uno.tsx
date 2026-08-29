@@ -3,15 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-// Extend JSX namespace to support wokwi elements
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-arduino-uno": any;
-    }
-  }
-}
-
 export const ARDUINO_UNO_DEFINITION: PartDefinition = {
   type: "wokwi-arduino-uno",
   label: "Arduino Uno",

@@ -3,14 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-membrane-keypad": any;
-    }
-  }
-}
-
 export const MEMBRANE_KEYPAD_DEFINITION: PartDefinition = {
   type: "wokwi-membrane-keypad",
   label: "Membrane Keypad",

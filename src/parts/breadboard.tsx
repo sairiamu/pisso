@@ -3,14 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-breadboard": any;
-    }
-  }
-}
-
 export const BREADBOARD_DEFINITION: PartDefinition = {
   type: "wokwi-breadboard",
   label: "Breadboard",

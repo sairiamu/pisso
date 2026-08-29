@@ -3,14 +3,6 @@ import { PartDefinition } from "./types";
 import { registerPart } from "./registry";
 import React from "react";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "wokwi-buzzer": any;
-    }
-  }
-}
-
 export const BUZZER_DEFINITION: PartDefinition = {
   type: "wokwi-buzzer",
   label: "Buzzer",

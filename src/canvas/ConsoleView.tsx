@@ -1,8 +1,7 @@
-import React, { useEffect, useRef, useState, useMemo } from "react";
-import { Copy, Trash2, Clock, ChevronRight, Check } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { Copy, Trash2, ChevronRight, Check } from "lucide-react";
 import { COLORS } from "../CONSTANTS/colors";
 import { EDITOR_CONFIG } from "../CONSTANTS/editor";
-import { TYPOGRAPHY } from "../CONSTANTS/typography";
 
 interface ConsoleLine {
   text: string;
