@@ -1,7 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use tauri::Manager;
+use std::process::{Command, Stdio};
+use std::io::{BufRead, BufReader};
+use tauri::{Manager, Emitter};
 
 /// GNU tools on Windows often choke on the Verbatim prefix (\\?\)
 /// provided by Rust's canonicalize() or Tauri's path resolvers.
@@ -12,6 +13,52 @@ fn clean_path<P: AsRef<Path>>(path: P) -> PathBuf {
     } else {
         path.as_ref().to_path_buf()
     }
+}
+
+#[derive(serde::Serialize)]
+struct SerialPortInfo {
+    port_name: String,
+    vendor_id: Option<u16>,
+    product_id: Option<u16>,
+    is_arduino: bool,
+}
+
+#[tauri::command]
+fn list_serial_ports() -> Result<Vec<SerialPortInfo>, String> {
+    let ports = serialport::available_ports().map_err(|e| e.to_string())?;
+    let mut port_list = Vec::new();
+
+    for p in ports {
+        let mut vendor_id = None;
+        let mut product_id = None;
+        let mut is_arduino = false;
+
+        if let serialport::SerialPortType::UsbPort(info) = p.port_type {
+            vendor_id = Some(info.vid);
+            product_id = Some(info.pid);
+
+            // Typical Arduino VIDs
+            let vid = info.vid;
+            if vid == 0x2341 || vid == 0x2A03 || vid == 0x1A86 || vid == 0x239A || vid == 0x1B4F || vid == 0x16C0 || vid == 0x10C4 || vid == 0x0403 {
+                is_arduino = true;
+            }
+
+            if let Some(product) = &info.product {
+                if product.contains("Arduino") {
+                    is_arduino = true;
+                }
+            }
+        }
+
+        port_list.push(SerialPortInfo {
+            port_name: p.port_name,
+            vendor_id,
+            product_id,
+            is_arduino,
+        });
+    }
+
+    Ok(port_list)
 }
 
 #[tauri::command]
@@ -223,6 +270,87 @@ async fn compile_sketch(
     Ok(hex_content)
 }
 
+#[tauri::command]
+async fn upload_hex(
+    app_handle: tauri::AppHandle,
+    hex_path: String,
+    port: String,
+    _board_fqbn: String,
+) -> Result<(), String> {
+    let resource_dir = app_handle
+        .path()
+        .resource_dir()
+        .map_err(|e| e.to_string())?;
+
+    let resource_dir = clean_path(resource_dir);
+    let hex_path = clean_path(hex_path);
+
+    let toolchain_bin = resource_dir.join("resources").join("avr-toolchain").join("bin");
+
+    #[cfg(windows)]
+    let avrdude = toolchain_bin.join("avrdude.exe");
+    #[cfg(not(windows))]
+    let avrdude = toolchain_bin.join("avrdude");
+
+    // avrdude.conf is usually bundled in the same bin folder or etc/
+    let mut avrdude_conf = toolchain_bin.join("avrdude.conf");
+    if !avrdude_conf.exists() {
+        // Fallback to etc/avrdude.conf if not in bin
+        avrdude_conf = toolchain_bin.parent().unwrap().join("etc").join("avrdude.conf");
+    }
+
+    if !avrdude.exists() {
+        return Err(format!("avrdude not found at {}", avrdude.display()));
+    }
+
+    // For now, we hardcode Uno parameters (atmega328p, arduino programmer, 115200 baud)
+    // In the future, these would be derived from board_fqbn.
+    let mut cmd = Command::new(&avrdude);
+    cmd.arg("-C")
+        .arg(&avrdude_conf)
+        .arg("-v")
+        .arg("-patmega328p")
+        .arg("-carduino")
+        .arg(format!("-P{}", port))
+        .arg("-b115200")
+        .arg("-D")
+        .arg(format!("-Uflash:w:{}:i", hex_path.display()))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn avrdude: {}", e))?;
+
+    let stdout = child.stdout.take().ok_or("Failed to open stdout")?;
+    let stderr = child.stderr.take().ok_or("Failed to open stderr")?;
+
+    let handle = app_handle.clone();
+    std::thread::spawn(move || {
+        let reader = BufReader::new(stdout);
+        for line in reader.lines() {
+            if let Ok(l) = line {
+                let _ = handle.emit("upload-progress", l);
+            }
+        }
+    });
+
+    let handle2 = app_handle.clone();
+    std::thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        for line in reader.lines() {
+            if let Ok(l) = line {
+                let _ = handle2.emit("upload-progress", l);
+            }
+        }
+    });
+
+    let status = child.wait().map_err(|e| format!("avrdude execution failed: {}", e))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err("avrdude exited with error. Check the progress logs for details.".into())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -233,7 +361,9 @@ pub fn run() {
             save_sketch,
             load_diagram,
             compile_sketch,
-            get_playground_path
+            upload_hex,
+            get_playground_path,
+            list_serial_ports
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

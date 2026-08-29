@@ -9,6 +9,7 @@ import { SimulationEngine } from "../simulator/engine";
 import { useSimulation } from "../simulator/SimulationContext";
 import { TerminalPanel } from "./TerminalPanel";
 import { GraphPanel } from "./GraphPanel";
+import { PortSelector } from "./PortSelector";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -21,6 +22,7 @@ interface AppShellProps {
   lastHex?: string | null;
   isSimulating?: boolean;
   onSimulateToggle?: (simulating: boolean) => void;
+  projectPath?: string | null;
 }
 
 /**
@@ -38,8 +40,10 @@ export const AppShell: React.FC<AppShellProps> = ({
   lastHex,
   isSimulating,
   onSimulateToggle,
+  projectPath,
 }) => {
   const [bottomPanel, setBottomPanel] = useState<'terminal' | 'graph' | null>(null);
+  const [selectedPort, setSelectedPort] = useState<string | null>(null);
   const [serialHeight, setSerialHeight] = useState(200);
   const [isResizing, setIsResizing] = useState(false);
   const engineRef = useRef<SimulationEngine | null>(null);
@@ -313,6 +317,11 @@ export const AppShell: React.FC<AppShellProps> = ({
             >
               {isSimulating ? "STOP SIM" : "SIMULATE"}
             </button>
+
+            <PortSelector
+              projectPath={projectPath || null}
+              onPortSelect={setSelectedPort}
+            />
           </div>
         </div>
 
