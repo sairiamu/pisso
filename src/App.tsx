@@ -150,6 +150,8 @@ function App() {
       isSimulating={isSimulating}
       onSimulateToggle={setIsSimulating}
       projectPath={projectPath}
+      activeCode={activeFile.content}
+      onCompileSuccess={setLastHex}
     >
       {debugStatus && (
         <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 10000, background: 'black', color: 'white', padding: '8px 16px', borderRadius: 20, border: '1px solid #C97A4B' }}>

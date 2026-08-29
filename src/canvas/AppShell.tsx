@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { Plus, FolderOpen, Save } from "lucide-react";
 import { Panel } from "../components/Panel";
 import { COLORS } from "../CONSTANTS/colors";
@@ -10,6 +11,7 @@ import { useSimulation } from "../simulator/SimulationContext";
 import { TerminalPanel } from "./TerminalPanel";
 import { GraphPanel } from "./GraphPanel";
 import { PortSelector } from "./PortSelector";
+import { UploadButton } from "./UploadButton";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -23,6 +25,8 @@ interface AppShellProps {
   isSimulating?: boolean;
   onSimulateToggle?: (simulating: boolean) => void;
   projectPath?: string | null;
+  activeCode?: string;
+  onCompileSuccess?: (hex: string) => void;
 }
 
 /**
@@ -41,6 +45,8 @@ export const AppShell: React.FC<AppShellProps> = ({
   isSimulating,
   onSimulateToggle,
   projectPath,
+  activeCode,
+  onCompileSuccess,
 }) => {
   const [bottomPanel, setBottomPanel] = useState<'terminal' | 'graph' | null>(null);
   const [selectedPort, setSelectedPort] = useState<string | null>(null);
@@ -52,8 +58,22 @@ export const AppShell: React.FC<AppShellProps> = ({
     resetPinStates,
     appendSerialOutput,
     buildOutput,
+    setBuildOutput,
     setWriteSerialHandler
   } = useSimulation();
+
+  // Listen for native upload progress events
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+
+    listen<string>("upload-progress", (event) => {
+      setBuildOutput(prev => (prev || "") + event.payload + "\n");
+    }).then(u => { unlisten = u; });
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [setBuildOutput]);
 
   // Automatically show terminal when build output arrives
   useEffect(() => {
@@ -321,6 +341,15 @@ export const AppShell: React.FC<AppShellProps> = ({
             <PortSelector
               projectPath={projectPath || null}
               onPortSelect={setSelectedPort}
+            />
+
+            <UploadButton
+              projectPath={projectPath || null}
+              selectedPort={selectedPort}
+              hasHex={!!lastHex}
+              code={activeCode || ""}
+              onCompileSuccess={onCompileSuccess}
+              onOutput={setBuildOutput}
             />
           </div>
         </div>

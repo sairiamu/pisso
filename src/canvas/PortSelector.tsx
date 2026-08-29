@@ -57,10 +57,11 @@ export const PortSelector: React.FC<PortSelectorProps> = ({ projectPath, onPortS
   }, [projectPath]);
 
   const handleSelect = (portName: string) => {
-    setSelectedPort(portName);
-    onPortSelect?.(portName);
-    if (projectPath) {
-      localStorage.setItem(`port_${projectPath}`, portName);
+    const val = portName === "" ? null : portName;
+    setSelectedPort(val);
+    onPortSelect?.(val);
+    if (projectPath && val) {
+      localStorage.setItem(`port_${projectPath}`, val);
     }
   };
 
@@ -84,7 +85,7 @@ export const PortSelector: React.FC<PortSelectorProps> = ({ projectPath, onPortS
             outline: "none"
           }}
         >
-          <option value="" disabled>Select Port...</option>
+          <option value="">Select Port...</option>
           {ports.map((p) => (
             <option key={p.port_name} value={p.port_name}>
               {p.port_name} {p.is_arduino ? "(Arduino)" : ""}
