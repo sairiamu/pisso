@@ -4,8 +4,8 @@ import { PINS } from "../CONSTANTS/pins";
 
 interface PinProps {
   id: string;
-  x: number;
-  y: number;
+  x: number | string;
+  y: number | string;
   type?: "source" | "target";
   _internal?: boolean;
 }
@@ -39,6 +39,7 @@ export const Pin: React.FC<PinProps> = ({ id, x, y, type = "source", _internal =
           ? `0 0 6px ${PINS.HOVER_COLOR}`
           : "inset 0 1px 1px rgba(0,0,0,0.3)",
         cursor: "crosshair",
+        pointerEvents: "auto",
       }}
     />
   );
