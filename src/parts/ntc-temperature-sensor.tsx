@@ -1,6 +1,5 @@
 import "@wokwi/elements";
 import { PartDefinition } from "./types";
-import { registerPart } from "./registry";
 import React from "react";
 
 export const NTC_TEMPERATURE_SENSOR_DEFINITION: PartDefinition = {
@@ -15,4 +14,4 @@ export const NTC_TEMPERATURE_SENSOR_DEFINITION: PartDefinition = {
   ),
 };
 
-registerPart(NTC_TEMPERATURE_SENSOR_DEFINITION);
+

@@ -1,6 +1,5 @@
 import "@wokwi/elements";
 import { PartDefinition } from "./types";
-import { registerPart } from "./registry";
 import React from "react";
 
 export const STEPPER_MOTOR_DEFINITION: PartDefinition = {
@@ -15,4 +14,4 @@ export const STEPPER_MOTOR_DEFINITION: PartDefinition = {
   ),
 };
 
-registerPart(STEPPER_MOTOR_DEFINITION);
+

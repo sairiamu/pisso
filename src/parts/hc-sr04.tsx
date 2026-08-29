@@ -1,6 +1,5 @@
 import "@wokwi/elements";
 import { PartDefinition } from "./types";
-import { registerPart } from "./registry";
 import React from "react";
 
 export const HC_SR04_DEFINITION: PartDefinition = {
@@ -15,4 +14,4 @@ export const HC_SR04_DEFINITION: PartDefinition = {
   ),
 };
 
-registerPart(HC_SR04_DEFINITION);
+

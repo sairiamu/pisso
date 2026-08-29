@@ -1,6 +1,5 @@
 import "@wokwi/elements";
 import { PartDefinition } from "./types";
-import { registerPart } from "./registry";
 import React from "react";
 
 export const SSD1306_DEFINITION: PartDefinition = {
@@ -15,4 +14,4 @@ export const SSD1306_DEFINITION: PartDefinition = {
   ),
 };
 
-registerPart(SSD1306_DEFINITION);
+

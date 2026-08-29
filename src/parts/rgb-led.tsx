@@ -1,6 +1,5 @@
 import "@wokwi/elements";
 import { PartDefinition } from "./types";
-import { registerPart } from "./registry";
 import React from "react";
 
 export const RGB_LED_DEFINITION: PartDefinition = {
@@ -15,4 +14,4 @@ export const RGB_LED_DEFINITION: PartDefinition = {
   ),
 };
 
-registerPart(RGB_LED_DEFINITION);
+

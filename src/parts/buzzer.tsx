@@ -1,6 +1,5 @@
 import "@wokwi/elements";
 import { PartDefinition } from "./types";
-import { registerPart } from "./registry";
 import React from "react";
 
 export const BUZZER_DEFINITION: PartDefinition = {
@@ -15,4 +14,4 @@ export const BUZZER_DEFINITION: PartDefinition = {
   ),
 };
 
-registerPart(BUZZER_DEFINITION);
+

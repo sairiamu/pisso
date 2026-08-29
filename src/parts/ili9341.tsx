@@ -1,6 +1,5 @@
 import "@wokwi/elements";
 import { PartDefinition } from "./types";
-import { registerPart } from "./registry";
 import React from "react";
 
 export const ILI9341_DEFINITION: PartDefinition = {
@@ -15,4 +14,4 @@ export const ILI9341_DEFINITION: PartDefinition = {
   ),
 };
 
-registerPart(ILI9341_DEFINITION);
+

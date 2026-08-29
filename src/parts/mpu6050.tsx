@@ -1,6 +1,5 @@
 import "@wokwi/elements";
 import { PartDefinition } from "./types";
-import { registerPart } from "./registry";
 import React from "react";
 
 export const MPU6050_DEFINITION: PartDefinition = {
@@ -15,4 +14,4 @@ export const MPU6050_DEFINITION: PartDefinition = {
   ),
 };
 
-registerPart(MPU6050_DEFINITION);
+

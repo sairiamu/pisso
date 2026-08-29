@@ -1,6 +1,5 @@
 import "@wokwi/elements";
 import { PartDefinition } from "./types";
-import { registerPart } from "./registry";
 import React from "react";
 
 export const DIP_SWITCH_8_DEFINITION: PartDefinition = {
@@ -15,4 +14,4 @@ export const DIP_SWITCH_8_DEFINITION: PartDefinition = {
   ),
 };
 
-registerPart(DIP_SWITCH_8_DEFINITION);
+

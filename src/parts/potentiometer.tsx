@@ -1,6 +1,5 @@
 import "@wokwi/elements";
 import { PartDefinition } from "./types";
-import { registerPart } from "./registry";
 import React from "react";
 
 export const POTENTIOMETER_DEFINITION: PartDefinition = {
@@ -15,4 +14,4 @@ export const POTENTIOMETER_DEFINITION: PartDefinition = {
   ),
 };
 
-registerPart(POTENTIOMETER_DEFINITION);
+
