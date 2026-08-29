@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from "react";
-import { X, Plus, Terminal, Activity, ChevronRight } from "lucide-react";
+import React, { useState } from "react";
+import { X, Plus, Terminal, Activity } from "lucide-react";
 import { Panel } from "../components/Panel";
 import { COLORS } from "../CONSTANTS/colors";
-import { EDITOR_CONFIG } from "../CONSTANTS/editor";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
 import { useSimulation } from "../simulator/SimulationContext";
+import { ConsoleView } from "./ConsoleView";
+import { SerialPanel } from "./SerialPanel";
 
 interface TerminalPanelProps {
   onClose?: () => void;
@@ -20,27 +21,13 @@ interface TabDef {
 
 export const TerminalPanel: React.FC<TerminalPanelProps> = ({ onClose }) => {
   const {
-    serialOutput,
-    clearSerialOutput,
     buildOutput,
     setBuildOutput,
-    writeSerial,
     serialConnected,
-    isSimulating,
-    serialSource
   } = useSimulation();
 
   const [activeTab, setActiveTab] = useState<TerminalTabType>("output");
   const [extraTabs, setExtraTabs] = useState<TabDef[]>([]);
-  const [inputValue, setInputValue] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [serialOutput, buildOutput, activeTab]);
 
   const tabs: TabDef[] = [
     { id: "output", label: "Output", icon: <Terminal size={14} /> },
@@ -60,36 +47,26 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ onClose }) => {
     if (activeTab === id) setActiveTab("output");
   };
 
-  const handleInputSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputValue.trim()) return;
-
-    if (activeTab === "serial") {
-      writeSerial(inputValue + "\n");
-    } else if (activeTab === "output") {
-      // For now, output tab just echoes for "terminal feel" or does nothing
-      console.log("Terminal Input:", inputValue);
-    }
-
-    setInputValue("");
-  };
-
   const renderContent = () => {
     switch (activeTab) {
       case "output":
         return (
-          <div style={{ color: buildOutput?.toLowerCase().includes("error") ? COLORS.FAULT_RED : COLORS.WARM_WHITE }}>
-            {buildOutput || <span style={{ color: COLORS.GRAPHITE_500, fontStyle: "italic" }}>No build output yet.</span>}
-          </div>
+          <ConsoleView
+            content={buildOutput || ""}
+            onClear={() => setBuildOutput(null)}
+            showInput={true}
+            placeholder="Command..."
+            onInputSubmit={(val) => console.log("Terminal Command:", val)}
+          />
         );
       case "serial":
+        return <SerialPanel />;
+      default:
         return (
-          <div>
-            {serialOutput || <span style={{ color: COLORS.GRAPHITE_500, fontStyle: "italic" }}>Waiting for serial data...</span>}
+          <div style={{ padding: "12px", color: COLORS.FOG, fontFamily: TYPOGRAPHY.CODE, fontSize: "12px" }}>
+            Terminal session: {activeTab}
           </div>
         );
-      default:
-        return <span style={{ color: COLORS.GRAPHITE_500 }}>Terminal session: {activeTab}</span>;
     }
   };
 
@@ -139,7 +116,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ onClose }) => {
                 borderBottom: "none",
                 cursor: "pointer",
                 marginBottom: "-1px",
-                zIndex: activeTab === tab.id ? 2 : 1,
+                zIndex: 2,
                 whiteSpace: "nowrap",
                 transition: "all 0.15s ease",
                 position: "relative"
@@ -188,38 +165,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ onClose }) => {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-          {activeTab === "serial" && (
-            <button
-              onClick={clearSerialOutput}
-              style={{
-                backgroundColor: "transparent",
-                color: COLORS.FOG,
-                border: `1px solid ${COLORS.GRAPHITE_500}`,
-                borderRadius: "4px",
-                fontSize: "10px",
-                padding: "1px 6px",
-                cursor: "pointer",
-              }}
-            >
-              Clear
-            </button>
-          )}
-          {activeTab === "output" && (
-            <button
-              onClick={() => setBuildOutput(null)}
-              style={{
-                backgroundColor: "transparent",
-                color: COLORS.FOG,
-                border: `1px solid ${COLORS.GRAPHITE_500}`,
-                borderRadius: "4px",
-                fontSize: "10px",
-                padding: "1px 6px",
-                cursor: "pointer",
-              }}
-            >
-              Clear
-            </button>
-          )}
+          <span style={{ fontSize: '9px', color: COLORS.FOG, opacity: 0.5 }}>Console v1.1</span>
           {onClose && (
             <button
               onClick={onClose}
@@ -240,53 +186,9 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ onClose }) => {
       </div>
 
       {/* Terminal Content Area */}
-      <div
-        ref={scrollRef}
-        style={{
-          flex: 1,
-          padding: "12px",
-          overflowY: "auto",
-          fontFamily: EDITOR_CONFIG.FONT_FAMILY,
-          fontSize: "12px",
-          color: COLORS.WARM_WHITE,
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-all",
-          lineHeight: 1.5,
-          backgroundColor: "#121417", // Slightly darker than Graphite-900 for terminal feel
-        }}
-      >
+      <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
         {renderContent()}
       </div>
-
-      {/* Terminal Input Area */}
-      <form
-        onSubmit={handleInputSubmit}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          backgroundColor: "#121417",
-          padding: "4px 12px 8px 12px",
-          borderTop: `1px solid ${COLORS.GRAPHITE_500}33`
-        }}
-      >
-        <ChevronRight size={14} color={COLORS.SOLDER_COPPER} style={{ marginRight: "4px" }} />
-        <input
-          ref={inputRef}
-          type="text"
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          placeholder={activeTab === "serial" ? "Send to serial..." : "Command..."}
-          style={{
-            flex: 1,
-            backgroundColor: "transparent",
-            border: "none",
-            color: COLORS.WARM_WHITE,
-            fontFamily: EDITOR_CONFIG.FONT_FAMILY,
-            fontSize: "12px",
-            outline: "none",
-          }}
-        />
-      </form>
     </Panel>
   );
 };
