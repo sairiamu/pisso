@@ -12,205 +12,214 @@ export type PartNodeData = {
   rotation?: number;
 };
 
+const SafePartRender: React.FC<{
+  definition: any;
+  attrs: any;
+  pinValues: any;
+  nodeId: string;
+}> = ({ definition, attrs, pinValues, nodeId }) => {
+  try {
+    return (
+      <div className="wokwi-container" style={{ display: "inline-block", margin: 0, padding: 0, lineHeight: 0 }}>
+        {definition.render({ attrs, pinValues })}
+      </div>
+    );
+  } catch (err) {
+    return (
+      <div style={{ color: "red", fontSize: "10px", padding: "5px", border: "1px solid red" }}>
+        Error: {definition.type}
+      </div>
+    );
+  }
+};
+
 export const PartNode: React.FC<NodeProps> = React.memo((props) => {
   const { pinStates, pinMappings, isSimulating } = useSimulation();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [dynamicPins, setDynamicPins] = useState<{ name: string; x: string; y: string }[] | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const refSvgRef = useRef<SVGSVGElement>(null);
+  const [dynamicPins, setDynamicPins] = useState<{ name: string; x: number; y: number }[] | null>(null);
   const retryCountRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const data = props.data as unknown as PartNodeData;
   const definition = data?.type ? PARTS_REGISTRY.get(data.type) : null;
 
-  /**
-   * Hardened updatePins logic to dynamically extract pin positions from Wokwi elements.
-   * This is more robust than static registry definitions for complex or configurable parts.
-   */
   const updatePins = useCallback(() => {
     try {
-      const container = containerRef.current;
-      if (!container) return;
+      const wrapper = wrapperRef.current;
+      const refSvg = refSvgRef.current;
+      if (!wrapper || !refSvg) return;
 
-      // Find any Wokwi element within the node
-      const element = container.querySelector('[class^="wokwi-"], [tag^="wokwi-"], wokwi-arduino-uno, wokwi-led, wokwi-7segment') as any;
+      // Find the Wokwi element
+      const element = Array.from(wrapper.querySelectorAll('*'))
+        .find(el => el.tagName.toLowerCase().includes('wokwi-')) as HTMLElement;
 
-      if (!element) {
-        if (retryCountRef.current < 15) {
+      if (!element || !element.shadowRoot) {
+        if (retryCountRef.current < 50) {
           retryCountRef.current++;
           timerRef.current = setTimeout(updatePins, 100);
         }
         return;
       }
 
-      // Safe shadow DOM and SVG inspection
-      const shadow = element.shadowRoot;
-      if (!shadow) {
-        if (retryCountRef.current < 15) {
-          retryCountRef.current++;
-          timerRef.current = setTimeout(updatePins, 100);
-        }
-        return;
-      }
-
-      const svg = shadow.querySelector('svg');
+      const svg = element.shadowRoot.querySelector('svg');
       if (!svg) {
-        if (retryCountRef.current < 15) {
+        if (retryCountRef.current < 50) {
           retryCountRef.current++;
           timerRef.current = setTimeout(updatePins, 100);
         }
         return;
       }
 
-      // Validate viewBox to prevent division by zero or NaN coordinates
-      const viewBox = svg.viewBox?.baseVal;
-      if (!viewBox || viewBox.width <= 0 || viewBox.height <= 0) {
-        if (retryCountRef.current < 15) {
+      const pinInfo = (element as any).pinInfo;
+      if (!pinInfo || !Array.isArray(pinInfo) || pinInfo.length === 0) {
+        if (retryCountRef.current < 50) {
           retryCountRef.current++;
           timerRef.current = setTimeout(updatePins, 100);
         }
         return;
       }
 
-      const { x: vx, y: vy, width: vw, height: vh } = viewBox;
+      // MATHEMATICALLY PERFECT COORDINATE MAPPING
+      // 1. Get the matrix that transforms Wokwi SVG units to screen pixels
+      const svgToScreen = svg.getScreenCTM();
+      // 2. Get the matrix that transforms local pixels in our wrapperRef to screen pixels
+      const wrapperToScreen = refSvg.getScreenCTM();
 
-      // Inspect pinInfo property provided by Wokwi elements
-      const pinInfo = element.pinInfo;
-      if (!pinInfo || !Array.isArray(pinInfo)) {
-        if (definition && definition.pins.length > 0 && retryCountRef.current < 10) {
+      if (!svgToScreen || !wrapperToScreen) {
+        if (retryCountRef.current < 50) {
           retryCountRef.current++;
           timerRef.current = setTimeout(updatePins, 100);
         }
         return;
       }
 
+      // 3. Create a relative matrix: Wokwi SVG Space -> Screen -> Local Wrapper Space
+      // The wrapperToScreen.inverse() maps screen pixels back to local CSS pixels.
+      const relMatrix = wrapperToScreen.inverse().multiply(svgToScreen);
+
+      const pt = svg.createSVGPoint();
       const newPins = pinInfo.map((p: any) => {
-        // Validate each pin's data
         if (!p || typeof p.x !== 'number' || typeof p.y !== 'number' || !p.name) return null;
-        if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return null;
+        pt.x = p.x;
+        pt.y = p.y;
 
-        // Convert absolute SVG coordinates to percentage-based CSS coordinates
+        // Transform the point from internal Wokwi units to local wrapper pixels
+        const pLoc = pt.matrixTransform(relMatrix);
+
         return {
           name: p.name,
-          x: `${((p.x - vx) / vw) * 100}%`,
-          y: `${((p.y - vy) / vh) * 100}%`
+          x: pLoc.x,
+          y: pLoc.y
         };
-      }).filter(Boolean) as { name: string; x: string; y: string }[];
+      }).filter(Boolean) as { name: string; x: number; y: number }[];
 
       if (newPins.length > 0) {
         setDynamicPins(newPins);
       }
     } catch (err) {
-      console.warn("PartNode: Error updating dynamic pins:", err);
+      console.error(`PartNode: Matrix sync failed for ${data.type}`, err);
     }
-  }, [definition]);
+  }, [definition, data.type]);
 
   useEffect(() => {
     retryCountRef.current = 0;
     updatePins();
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [updatePins, data.attrs]);
 
-  const pins = useMemo(() => {
-    // Prefer dynamic pins from the actual element if available
-    if (dynamicPins && dynamicPins.length > 0) return dynamicPins;
+    // Refresh at key intervals to catch slow-rendering components
+    const timers = [100, 500, 1500, 3000].map(ms => setTimeout(updatePins, ms));
+    return () => timers.forEach(t => clearTimeout(t));
+  }, [updatePins, data.attrs, data.rotation]);
 
-    // Fallback to static definitions from the registry
-    if (!definition) return [];
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+    const observer = new ResizeObserver(() => updatePins());
+    observer.observe(wrapper);
+    const element = Array.from(wrapper.querySelectorAll('*')).find(el => el.tagName.toLowerCase().includes('wokwi-'));
+    if (element) observer.observe(element);
+    return () => observer.disconnect();
+  }, [updatePins]);
 
-    try {
-      const { x: vx, y: vy, width: vw, height: vh } = definition.viewBox;
-      if (vw <= 0 || vh <= 0) return [];
+  const pins = useMemo(() => dynamicPins || [], [dynamicPins]);
 
-      return definition.pins.map(p => ({
-        name: p.name,
-        x: `${((Number(p.x) - vx) / vw) * 100}%`,
-        y: `${((Number(p.y) - vy) / vh) * 100}%`
-      }));
-    } catch (e) {
-      return [];
-    }
-  }, [definition, dynamicPins]);
-
-  // Resolve pin values for simulation
   const pinValues = useMemo(() => {
     const values: Record<string, 'HIGH' | 'LOW' | 'FLOAT'> = {};
     if (isSimulating && pins.length > 0) {
       pins.forEach(pin => {
         const key = `${props.id}:${pin.name}`;
         const mappedArduinoPins = pinMappings[key] || [];
-
         if (mappedArduinoPins.some(p => String(p).toLowerCase().includes('gnd'))) {
           values[pin.name] = 'LOW';
         } else {
           const states = mappedArduinoPins.map(p => pinStates[p]).filter(Boolean);
-          if (states.includes('HIGH')) {
-            values[pin.name] = 'HIGH';
-          } else if (states.includes('LOW')) {
-            values[pin.name] = 'LOW';
-          } else {
-            values[pin.name] = 'FLOAT';
-          }
+          if (states.includes('HIGH')) values[pin.name] = 'HIGH';
+          else if (states.includes('LOW')) values[pin.name] = 'LOW';
+          else values[pin.name] = 'FLOAT';
         }
       });
     }
     return values;
   }, [isSimulating, pins, pinMappings, pinStates, props.id]);
 
-  if (!data || !data.type) {
-    return <div style={{ color: "orange" }}>Missing Node Data</div>;
-  }
-
-  if (!definition) {
-    return (
-      <div
-        style={{
-          padding: 10,
-          background: "rgba(255,0,0,0.2)",
-          color: "white",
-          border: "1px solid red",
-        }}
-      >
-        Unknown Part: {data.type}
-      </div>
-    );
-  }
-
   const rotation = data.rotation || 0;
 
   return (
     <ErrorBoundary name={`PartNode(${data.type})`}>
       <div
-        ref={containerRef}
         className="pissow-part-node"
         style={{
           position: "relative",
-          minWidth: "100px",
-          minHeight: "100px",
           transform: `rotate(${rotation}deg)`,
           transformOrigin: "center center",
           padding: "20px",
-          backgroundColor: props.selected ? "rgba(201, 122, 75, 0.2)" : "rgba(60, 64, 72, 0.8)",
+          backgroundColor: props.selected ? "rgba(201, 122, 75, 0.2)" : "rgba(30, 32, 38, 0.4)",
           border: props.selected ? `2px solid ${COLORS.SOLDER_COPPER}` : `1px solid ${COLORS.GRAPHITE_500}`,
           borderRadius: "8px",
-          boxShadow: "0 4px 6px rgba(0,0,0,0.3)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center"
+          display: "inline-block",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
+          textAlign: "center"
         }}
       >
-        <div style={{ color: COLORS.WARM_WHITE, fontSize: "10px", marginBottom: "5px", opacity: 0.5 }}>
-          {definition.label}
+        <div style={{ color: COLORS.WARM_WHITE, fontSize: "10px", marginBottom: "8px", opacity: 0.6, fontFamily: "monospace", pointerEvents: "none" }}>
+          {definition?.label}
         </div>
-        <div style={{ position: "relative", display: "inline-block" }}>
+
+        <div
+          ref={wrapperRef}
+          style={{
+            position: "relative",
+            display: "inline-block",
+            lineHeight: 0
+          }}
+        >
+          {/* Reference SVG at origin (0,0) for sub-pixel coordinate mapping */}
+          <svg
+            ref={refSvgRef}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '1px',
+              height: '1px',
+              opacity: 0, // Must be rendered but invisible
+              pointerEvents: 'none'
+            }}
+          >
+            <rect width="1" height="1" />
+          </svg>
+
           {/* Render the actual Wokwi element */}
-          <div style={{ pointerEvents: "none" }}>
-            {definition.render({ attrs: data.attrs || {}, pinValues })}
+          <div style={{ pointerEvents: "none", display: "inline-block" }}>
+            <SafePartRender
+              definition={definition}
+              attrs={data.attrs || {}}
+              pinValues={pinValues}
+              nodeId={props.id}
+            />
           </div>
 
-          {/* Render draggable connection points */}
+          {/* Render draggable handles at mathematically transformed coordinates */}
           {pins.map((pin) => (
             <Pin
               key={pin.name}
@@ -220,22 +229,7 @@ export const PartNode: React.FC<NodeProps> = React.memo((props) => {
               _internal={true}
             />
           ))}
-
-          {/* Development helper to cross-check pin placement */}
-          {process.env.NODE_ENV === 'development' && (
-            <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-              <wokwi-show-pins />
-            </div>
-          )}
         </div>
-
-        {/* Hidden handles for React Flow connectivity */}
-        {pins.length === 0 && (
-          <>
-            <Handle id="loading-source" type="source" position={Position.Bottom} style={{ opacity: 0 }} />
-            <Handle id="loading-target" type="target" position={Position.Top} style={{ opacity: 0 }} />
-          </>
-        )}
       </div>
     </ErrorBoundary>
   );

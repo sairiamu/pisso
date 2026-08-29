@@ -14,32 +14,34 @@ export const Pin: React.FC<PinProps> = ({ id, x, y, type = "source", _internal =
   if (!_internal) return null;
   const [isHovered, setIsHovered] = useState(false);
 
+  // Use pixel strings for absolute CSS placement
+  const left = typeof x === 'number' ? `${x}px` : x;
+  const top = typeof y === 'number' ? `${y}px` : y;
+
   return (
     <Handle
       id={id}
       type={type}
-      position={Position.Top} // Position doesn't matter much for absolute placement but is required
+      position={Position.Top}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       style={{
         position: "absolute",
-        left: x,
-        top: y,
+        left: left,
+        top: top,
         width: PINS.SIZE,
         height: PINS.SIZE,
         backgroundColor: isHovered ? PINS.HOVER_COLOR : PINS.COLOR,
-        border: "none",
+        border: "1px solid rgba(0,0,0,0.3)",
         borderRadius: "50%",
-        transform: "translate(-50%, -50%)",
-        transition: "background-color 0.2s ease, box-shadow 0.2s ease",
-        zIndex: 10,
+        transform: "translate(-50%, -50%)", // Center the handle on the coordinate
+        transition: "background-color 0.15s ease",
+        zIndex: 1000,
         minWidth: 0,
         minHeight: 0,
-        boxShadow: isHovered
-          ? `0 0 6px ${PINS.HOVER_COLOR}`
-          : "inset 0 1px 1px rgba(0,0,0,0.3)",
         cursor: "crosshair",
         pointerEvents: "auto",
+        boxShadow: isHovered ? `0 0 8px ${PINS.HOVER_COLOR}` : "none"
       }}
     />
   );
