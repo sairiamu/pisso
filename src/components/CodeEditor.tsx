@@ -33,7 +33,12 @@ const pissowTheme = EditorView.theme(
       lineHeight: EDITOR_CONFIG.LINE_HEIGHT,
     },
     ".cm-scroller": {
-      overflow: "hidden",
+      overflow: "auto",
+      scrollbarWidth: "none",
+      msOverflowStyle: "none",
+      "&::-webkit-scrollbar": {
+        display: "none",
+      },
     },
     ".cm-cursor, .cm-dropCursor": {
       borderLeftColor: EDITOR_CONFIG.THEME.CURSOR
