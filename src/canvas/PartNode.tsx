@@ -1,9 +1,10 @@
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useRef, useMemo, useState, useEffect, useCallback } from "react";
 import { NodeProps, Handle, Position } from "@xyflow/react";
 import { PARTS_REGISTRY } from "../parts/registry";
 import { Pin } from "../components/Pin";
 import { COLORS } from "../CONSTANTS/colors";
 import { useSimulation } from "../simulator/SimulationContext";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 
 export type PartNodeData = {
   type: string;
@@ -11,46 +12,126 @@ export type PartNodeData = {
   rotation?: number;
 };
 
-interface InternalPin {
-  name: string;
-  x: string | number;
-  y: string | number;
-}
-
 export const PartNode: React.FC<NodeProps> = React.memo((props) => {
   const { pinStates, pinMappings, isSimulating } = useSimulation();
-  const [pins, setPins] = useState<InternalPin[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [dynamicPins, setDynamicPins] = useState<{ name: string; x: string; y: string }[] | null>(null);
+  const retryCountRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const data = props.data as unknown as PartNodeData;
   const definition = data?.type ? PARTS_REGISTRY.get(data.type) : null;
 
-  useEffect(() => {
-    let mounted = true;
-    const updatePins = () => {
-      if (!mounted) return;
-      const element = containerRef.current?.querySelector('[class^="wokwi-"], wokwi-led, wokwi-arduino-uno, wokwi-resistor, wokwi-pushbutton, wokwi-breadboard');
-      if (element) {
-        const pinInfo = (element as any).pinInfo;
-        const svg = element.shadowRoot?.querySelector('svg');
-        if (pinInfo && svg) {
-          const { width, height } = svg.viewBox.baseVal;
-          const newPins = pinInfo.map((p: any) => ({
-            name: p.name,
-            x: `${(p.x / width) * 100}%`,
-            y: `${(p.y / height) * 100}%`
-          }));
-          setPins(newPins);
-        } else {
-          // Retry if not yet loaded
-          setTimeout(updatePins, 50);
-        }
-      }
-    };
+  /**
+   * Hardened updatePins logic to dynamically extract pin positions from Wokwi elements.
+   * This is more robust than static registry definitions for complex or configurable parts.
+   */
+  const updatePins = useCallback(() => {
+    try {
+      const container = containerRef.current;
+      if (!container) return;
 
+      // Find any Wokwi element within the node
+      const element = container.querySelector('[class^="wokwi-"], [tag^="wokwi-"], wokwi-arduino-uno, wokwi-led, wokwi-7segment') as any;
+
+      if (!element) {
+        if (retryCountRef.current < 15) {
+          retryCountRef.current++;
+          timerRef.current = setTimeout(updatePins, 100);
+        }
+        return;
+      }
+
+      // Safe shadow DOM and SVG inspection
+      const shadow = element.shadowRoot;
+      if (!shadow) {
+        if (retryCountRef.current < 15) {
+          retryCountRef.current++;
+          timerRef.current = setTimeout(updatePins, 100);
+        }
+        return;
+      }
+
+      const svg = shadow.querySelector('svg');
+      if (!svg) {
+        if (retryCountRef.current < 15) {
+          retryCountRef.current++;
+          timerRef.current = setTimeout(updatePins, 100);
+        }
+        return;
+      }
+
+      // Validate viewBox to prevent division by zero or NaN coordinates
+      const viewBox = svg.viewBox?.baseVal;
+      if (!viewBox || viewBox.width <= 0 || viewBox.height <= 0) {
+        if (retryCountRef.current < 15) {
+          retryCountRef.current++;
+          timerRef.current = setTimeout(updatePins, 100);
+        }
+        return;
+      }
+
+      const { x: vx, y: vy, width: vw, height: vh } = viewBox;
+
+      // Inspect pinInfo property provided by Wokwi elements
+      const pinInfo = element.pinInfo;
+      if (!pinInfo || !Array.isArray(pinInfo)) {
+        if (definition && definition.pins.length > 0 && retryCountRef.current < 10) {
+          retryCountRef.current++;
+          timerRef.current = setTimeout(updatePins, 100);
+        }
+        return;
+      }
+
+      const newPins = pinInfo.map((p: any) => {
+        // Validate each pin's data
+        if (!p || typeof p.x !== 'number' || typeof p.y !== 'number' || !p.name) return null;
+        if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return null;
+
+        // Convert absolute SVG coordinates to percentage-based CSS coordinates
+        return {
+          name: p.name,
+          x: `${((p.x - vx) / vw) * 100}%`,
+          y: `${((p.y - vy) / vh) * 100}%`
+        };
+      }).filter(Boolean) as { name: string; x: string; y: string }[];
+
+      if (newPins.length > 0) {
+        setDynamicPins(newPins);
+      }
+    } catch (err) {
+      console.warn("PartNode: Error updating dynamic pins:", err);
+    }
+  }, [definition]);
+
+  useEffect(() => {
+    retryCountRef.current = 0;
     updatePins();
-    return () => { mounted = false; };
-  }, [data?.attrs, data?.type]);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [updatePins, data.attrs]);
+
+  const pins = useMemo(() => {
+    // Prefer dynamic pins from the actual element if available
+    if (dynamicPins && dynamicPins.length > 0) return dynamicPins;
+
+    // Fallback to static definitions from the registry
+    if (!definition) return [];
+
+    try {
+      const { x: vx, y: vy, width: vw, height: vh } = definition.viewBox;
+      if (vw <= 0 || vh <= 0) return [];
+
+      return definition.pins.map(p => ({
+        name: p.name,
+        x: `${((Number(p.x) - vx) / vw) * 100}%`,
+        y: `${((Number(p.y) - vy) / vh) * 100}%`
+      }));
+    } catch (e) {
+      return [];
+    }
+  }, [definition, dynamicPins]);
 
   // Resolve pin values for simulation
   const pinValues = useMemo(() => {
@@ -77,29 +158,29 @@ export const PartNode: React.FC<NodeProps> = React.memo((props) => {
     return values;
   }, [isSimulating, pins, pinMappings, pinStates, props.id]);
 
-  try {
-    if (!data || !data.type) {
-      return <div style={{ color: "orange" }}>Missing Node Data</div>;
-    }
+  if (!data || !data.type) {
+    return <div style={{ color: "orange" }}>Missing Node Data</div>;
+  }
 
-    if (!definition) {
-      return (
-        <div
-          style={{
-            padding: 10,
-            background: "rgba(255,0,0,0.2)",
-            color: "white",
-            border: "1px solid red",
-          }}
-        >
-          Unknown Part: {data.type}
-        </div>
-      );
-    }
-
-    const rotation = data.rotation || 0;
-
+  if (!definition) {
     return (
+      <div
+        style={{
+          padding: 10,
+          background: "rgba(255,0,0,0.2)",
+          color: "white",
+          border: "1px solid red",
+        }}
+      >
+        Unknown Part: {data.type}
+      </div>
+    );
+  }
+
+  const rotation = data.rotation || 0;
+
+  return (
+    <ErrorBoundary name={`PartNode(${data.type})`}>
       <div
         ref={containerRef}
         className="pissow-part-node"
@@ -129,7 +210,7 @@ export const PartNode: React.FC<NodeProps> = React.memo((props) => {
             {definition.render({ attrs: data.attrs || {}, pinValues })}
           </div>
 
-          {/* Render one draggable connection point per pin */}
+          {/* Render draggable connection points */}
           {pins.map((pin) => (
             <Pin
               key={pin.name}
@@ -148,10 +229,7 @@ export const PartNode: React.FC<NodeProps> = React.memo((props) => {
           )}
         </div>
 
-        {/*
-            Hidden handles to satisfy React Flow's requirement for at least one source/target
-            if pins haven't loaded yet, but with the new dynamic system these are mostly redundant.
-        */}
+        {/* Hidden handles for React Flow connectivity */}
         {pins.length === 0 && (
           <>
             <Handle id="loading-source" type="source" position={Position.Bottom} style={{ opacity: 0 }} />
@@ -159,9 +237,6 @@ export const PartNode: React.FC<NodeProps> = React.memo((props) => {
           </>
         )}
       </div>
-    );
-  } catch (e) {
-    console.error("Error rendering PartNode", e);
-    return <div style={{ color: "red" }}>Render Error</div>;
-  }
+    </ErrorBoundary>
+  );
 });

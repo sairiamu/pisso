@@ -23,6 +23,7 @@ import { ProjectContextMenu } from "./ProjectContextMenu";
 import { resolveNode, Diagram, PartInstance } from "../diagram";
 import { PARTS_REGISTRY } from "../parts";
 import { useSimulation } from "../simulator/SimulationContext";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 import "../parts"; // Ensure all parts are registered
 
 const nodeTypes = {
@@ -318,35 +319,37 @@ const CanvasInternal = forwardRef<CanvasShellHandle>((_, ref) => {
         onDrop={onDrop}
         onDragOver={onDragOver}
       >
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onInit={setReactFlowInstance}
-          onPaneContextMenu={onPaneContextMenu}
-          nodeTypes={memoizedNodeTypes}
-          edgeTypes={memoizedEdgeTypes}
-          connectionMode={ConnectionMode.Loose}
-          colorMode="dark"
-          deleteKeyCode={["Backspace", "Delete"]}
-          style={{ backgroundColor: COLORS.GRAPHITE_900 }}
-        >
-          <Background
-            variant={BackgroundVariant.Dots}
-            color={COLORS.GRAPHITE_500}
-            gap={20}
-          />
-          {lastError && (
-            <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 1000, background: 'red', color: 'white', padding: '4px 8px', borderRadius: 4 }}>
-              {lastError}
+        <ErrorBoundary name="Canvas">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onInit={setReactFlowInstance}
+            onPaneContextMenu={onPaneContextMenu}
+            nodeTypes={memoizedNodeTypes}
+            edgeTypes={memoizedEdgeTypes}
+            connectionMode={ConnectionMode.Loose}
+            colorMode="dark"
+            deleteKeyCode={["Backspace", "Delete"]}
+            style={{ backgroundColor: COLORS.GRAPHITE_900 }}
+          >
+            <Background
+              variant={BackgroundVariant.Dots}
+              color={COLORS.GRAPHITE_500}
+              gap={20}
+            />
+            {lastError && (
+              <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 1000, background: 'red', color: 'white', padding: '4px 8px', borderRadius: 4 }}>
+                {lastError}
+              </div>
+            )}
+            <div style={{ position: 'absolute', bottom: 10, right: 10, zIndex: 1000, color: COLORS.FOG, fontSize: 10 }}>
+              Nodes: {nodes.length}
             </div>
-          )}
-          <div style={{ position: 'absolute', bottom: 10, right: 10, zIndex: 1000, color: COLORS.FOG, fontSize: 10 }}>
-            Nodes: {nodes.length}
-          </div>
-        </ReactFlow>
+          </ReactFlow>
+        </ErrorBoundary>
       </div>
       {selectedPart && (
         <div style={{ width: "260px", borderLeft: `1px solid ${COLORS.GRAPHITE_500}` }}>
