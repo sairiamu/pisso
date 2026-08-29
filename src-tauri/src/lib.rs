@@ -29,6 +29,34 @@ struct SerialPortInfo {
     is_arduino: bool,
 }
 
+struct BoardConfig {
+    mcu: &'static str,
+    f_cpu: &'static str,
+    variant: &'static str,
+    extra_flags: &'static [&'static str],
+    avrdude_part: &'static str,
+    avrdude_programmer: &'static str,
+    avrdude_baud: &'static str,
+}
+
+fn get_board_config(fqbn: &str) -> Result<BoardConfig, String> {
+    match fqbn {
+        "arduino:avr:uno" => Ok(BoardConfig {
+            mcu: "atmega328p",
+            f_cpu: "16000000L",
+            variant: "standard",
+            extra_flags: &["-DARDUINO_AVR_UNO", "-DARDUINO_ARCH_AVR"],
+            avrdude_part: "atmega328p",
+            avrdude_programmer: "arduino",
+            avrdude_baud: "115200",
+        }),
+        _ => Err(format!(
+            "Unsupported board: {}. Currently, only 'arduino:avr:uno' is supported.",
+            fqbn
+        )),
+    }
+}
+
 #[tauri::command]
 fn list_serial_ports() -> Result<Vec<SerialPortInfo>, String> {
     let ports = serialport::available_ports().map_err(|e| e.to_string())?;
@@ -110,8 +138,10 @@ fn load_diagram(project_path: String) -> Result<String, String> {
 async fn compile_sketch(
     app_handle: tauri::AppHandle,
     sketch_path: String,
-    _board_fqbn: String,
+    board_fqbn: String,
 ) -> Result<String, String> {
+    let config = get_board_config(&board_fqbn)?;
+
     let resource_dir = app_handle
         .path()
         .resource_dir()
@@ -138,7 +168,7 @@ async fn compile_sketch(
     let avr_objcopy = toolchain_bin.join("avr-objcopy");
 
     let arduino_core = resource_dir.join("resources").join("arduino-core");
-    let arduino_variants = resource_dir.join("resources").join("arduino-variants").join("standard");
+    let arduino_variants = resource_dir.join("resources").join("arduino-variants").join(config.variant);
 
     // Check if toolchain exists
     if !avr_gcc.exists() {
@@ -183,12 +213,15 @@ async fn compile_sketch(
                         .arg("-w") // Suppress core warnings
                         .arg("-ffunction-sections")
                         .arg("-fdata-sections")
-                        .arg("-mmcu=atmega328p")
-                        .arg("-DF_CPU=16000000L")
-                        .arg("-DARDUINO=10810")
-                        .arg("-DARDUINO_AVR_UNO")
-                        .arg("-DARDUINO_ARCH_AVR")
-                        .arg(format!("-I{}", arduino_core.display()))
+                        .arg(format!("-mmcu={}", config.mcu))
+                        .arg(format!("-DF_CPU={}", config.f_cpu))
+                        .arg("-DARDUINO=10810");
+
+                    for flag in config.extra_flags {
+                        cmd.arg(flag);
+                    }
+
+                    cmd.arg(format!("-I{}", arduino_core.display()))
                         .arg(format!("-I{}", arduino_variants.display()))
                         .arg(&path)
                         .arg("-o")
@@ -208,18 +241,21 @@ async fn compile_sketch(
     let sketch_obj = PathBuf::from(&sketch_path).with_extension("o");
 
     // 2. Compile Sketch
-    let compile_output = Command::new(&avr_gxx)
-        .arg("-c")
+    let mut compile_cmd = Command::new(&avr_gxx);
+    compile_cmd.arg("-c")
         .arg("-g")
         .arg("-Os")
         .arg("-ffunction-sections")
         .arg("-fdata-sections")
-        .arg("-mmcu=atmega328p")
-        .arg("-DF_CPU=16000000L")
-        .arg("-DARDUINO=10810")
-        .arg("-DARDUINO_AVR_UNO")
-        .arg("-DARDUINO_ARCH_AVR")
-        .arg(format!("-I{}", arduino_core.display()))
+        .arg(format!("-mmcu={}", config.mcu))
+        .arg(format!("-DF_CPU={}", config.f_cpu))
+        .arg("-DARDUINO=10810");
+
+    for flag in config.extra_flags {
+        compile_cmd.arg(flag);
+    }
+
+    let compile_output = compile_cmd.arg(format!("-I{}", arduino_core.display()))
         .arg(format!("-I{}", arduino_variants.display()))
         .arg("-include")
         .arg("Arduino.h")
@@ -239,7 +275,7 @@ async fn compile_sketch(
     let mut link_cmd = Command::new(&avr_gcc);
     link_cmd.arg("-g")
         .arg("-Os")
-        .arg("-mmcu=atmega328p")
+        .arg(format!("-mmcu={}", config.mcu))
         .arg("-Wl,--gc-sections")
         .arg("-o")
         .arg(&output_elf)
@@ -281,8 +317,10 @@ async fn upload_hex(
     app_handle: tauri::AppHandle,
     hex_path: String,
     port: String,
-    _board_fqbn: String,
+    board_fqbn: String,
 ) -> Result<(), String> {
+    let config = get_board_config(&board_fqbn)?;
+
     let resource_dir = app_handle
         .path()
         .resource_dir()
@@ -309,16 +347,14 @@ async fn upload_hex(
         return Err(format!("avrdude not found at {}", avrdude.display()));
     }
 
-    // For now, we hardcode Uno parameters (atmega328p, arduino programmer, 115200 baud)
-    // In the future, these would be derived from board_fqbn.
     let mut cmd = Command::new(&avrdude);
     cmd.arg("-C")
         .arg(&avrdude_conf)
         .arg("-v")
-        .arg("-patmega328p")
-        .arg("-carduino")
+        .arg(format!("-p{}", config.avrdude_part))
+        .arg(format!("-c{}", config.avrdude_programmer))
         .arg(format!("-P{}", port))
-        .arg("-b115200")
+        .arg(format!("-b{}", config.avrdude_baud))
         .arg("-D")
         .arg(format!("-Uflash:w:{}:i", hex_path.display()))
         .stdout(Stdio::piped())
