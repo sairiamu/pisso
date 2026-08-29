@@ -4,12 +4,13 @@ import { Upload } from "lucide-react";
 import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
 import { writeSketch } from "../diagram/sketch";
+import { FileEntry } from "../App";
 
 interface UploadButtonProps {
   projectPath: string | null;
   selectedPort: string | null;
   hasHex: boolean;
-  code: string;
+  files: FileEntry[];
   onCompileSuccess?: (hex: string) => void;
   onOutput?: (output: string | null) => void;
   onUploadSuccess?: () => void;
@@ -19,7 +20,7 @@ export const UploadButton: React.FC<UploadButtonProps> = ({
   projectPath,
   selectedPort,
   hasHex,
-  code,
+  files,
   onCompileSuccess,
   onOutput,
   onUploadSuccess,
@@ -48,14 +49,20 @@ export const UploadButton: React.FC<UploadButtonProps> = ({
 
       // 1. Compile if needed
       if (!hasHex) {
-        onOutput?.("No compiled hex found. Compiling sketch first...");
-        await invoke("save_sketch", {
-            projectPath: activePath,
-            sketchCode: writeSketch(code || "")
-        });
+        onOutput?.("No compiled hex found. Compiling project first...");
+
+        // Save all project files
+        const projectFiles = files.map(file => ({
+            name: file.name,
+            content: file.name.endsWith(".ino") ? writeSketch(file.content) : file.content
+        }));
+        await invoke("save_project_files", { projectPath: activePath, files: projectFiles });
+
+        const mainSketch = files.find(f => f.name.endsWith(".ino")) || files[0];
+        const sketchPath = `${activePath}/${mainSketch.name}`;
 
         const hexContent = await invoke<string>("compile_sketch", {
-          sketchPath: `${activePath}/sketch.ino`,
+          sketchPath,
           boardFqbn: "arduino:avr:uno",
         });
 

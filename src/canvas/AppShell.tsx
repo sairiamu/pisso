@@ -14,6 +14,8 @@ import { GraphPanel } from "./GraphPanel";
 import { PortSelector } from "./PortSelector";
 import { UploadButton } from "./UploadButton";
 
+import { FileEntry } from "../App";
+
 interface AppShellProps {
   children: React.ReactNode;
   mode: AppMode;
@@ -26,7 +28,7 @@ interface AppShellProps {
   isSimulating?: boolean;
   onSimulateToggle?: (simulating: boolean) => void;
   projectPath?: string | null;
-  activeCode?: string;
+  files: FileEntry[];
   onCompileSuccess?: (hex: string) => void;
 }
 
@@ -46,7 +48,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   isSimulating,
   onSimulateToggle,
   projectPath,
-  activeCode,
+  files,
   onCompileSuccess,
 }) => {
   const [bottomPanel, setBottomPanel] = useState<'terminal' | 'graph' | null>(null);
@@ -420,7 +422,7 @@ export const AppShell: React.FC<AppShellProps> = ({
               projectPath={projectPath || null}
               selectedPort={selectedPort}
               hasHex={!!lastHex}
-              code={activeCode || ""}
+              files={files}
               onCompileSuccess={onCompileSuccess}
               onOutput={appendBuildOutput}
               onUploadSuccess={handleUploadSuccess}

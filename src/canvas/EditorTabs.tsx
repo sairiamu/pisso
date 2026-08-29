@@ -118,7 +118,7 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({
           <div style={{ marginBottom: "4px", marginRight: "4px", display: "flex", alignItems: "center", gap: "8px" }}>
             <RunButton
               projectPath={projectPath}
-              code={files[0].content} // We compile the main sketch.ino for now
+              files={files}
               onOutput={onOutput}
               onCompileSuccess={onCompileSuccess}
               onProjectPathChange={onProjectPathChange}

@@ -2,10 +2,11 @@ import React, { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { COLORS } from "../CONSTANTS/colors";
 import { writeSketch } from "../diagram/sketch";
+import { FileEntry } from "../App";
 
 interface RunButtonProps {
   projectPath: string | null;
-  code: string;
+  files: FileEntry[];
   onOutput?: (output: string | null) => void;
   onCompileSuccess?: (hex: string) => void;
   onProjectPathChange?: (path: string) => void;
@@ -17,7 +18,7 @@ interface RunButtonProps {
  */
 export const RunButton: React.FC<RunButtonProps> = ({
   projectPath,
-  code,
+  files,
   onOutput,
   onCompileSuccess,
 }) => {
@@ -41,14 +42,21 @@ export const RunButton: React.FC<RunButtonProps> = ({
     setIsCompiling(true);
     setStatus("Compiling...");
     onOutput?.(null); // Clear previous output
-    onOutput?.("Compiling sketch...");
+    onOutput?.("Compiling project...");
 
     try {
-      // 1. Save the current sketch buffer to sketch.ino
-      await invoke("save_sketch", { projectPath: activePath, sketchCode: writeSketch(code) });
+      // 1. Save all project files
+      const projectFiles = files.map(file => ({
+          name: file.name,
+          content: file.name.endsWith(".ino") ? writeSketch(file.content) : file.content
+      }));
+      await invoke("save_project_files", { projectPath: activePath, files: projectFiles });
 
       // 2. Invoke the compile command
-      const sketchPath = `${activePath}/sketch.ino`;
+      // Find the main sketch file (sketch.ino)
+      const mainSketch = files.find(f => f.name.endsWith(".ino")) || files[0];
+      const sketchPath = `${activePath}/${mainSketch.name}`;
+
       const hexContent = await invoke<string>("compile_sketch", {
         sketchPath,
         boardFqbn: "arduino:avr:uno",

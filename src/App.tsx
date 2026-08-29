@@ -149,7 +149,7 @@ function App() {
       isSimulating={isSimulating}
       onSimulateToggle={setIsSimulating}
       projectPath={projectPath}
-      activeCode={activeFile.content}
+      files={files}
       onCompileSuccess={setLastHex}
     >
       {debugStatus && (

@@ -118,6 +118,26 @@ fn get_playground_path(app_handle: tauri::AppHandle) -> Result<String, String> {
     Ok(clean_path(path).to_string_lossy().to_string())
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ProjectFile {
+    name: String,
+    content: String,
+}
+
+#[tauri::command]
+fn save_project_files(project_path: String, files: Vec<ProjectFile>) -> Result<(), String> {
+    let path = PathBuf::from(project_path);
+    if !path.exists() {
+        fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+    }
+    for file in files {
+        let mut file_path = path.clone();
+        file_path.push(file.name);
+        fs::write(file_path, file.content).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn save_sketch(project_path: String, sketch_code: String) -> Result<(), String> {
     let mut path = PathBuf::from(project_path);
@@ -155,6 +175,7 @@ async fn compile_sketch(
     let arduino_variants = clean_path(arduino_variants_base).join(config.variant);
 
     let sketch_path = clean_path(sketch_path);
+    let project_dir = sketch_path.parent().ok_or("Invalid sketch path")?;
     let toolchain_bin = avr_toolchain.join("bin");
 
     #[cfg(windows)]
@@ -254,7 +275,57 @@ async fn compile_sketch(
     let output_hex = PathBuf::from(&sketch_path).with_extension("hex");
     let sketch_obj = PathBuf::from(&sketch_path).with_extension("o");
 
-    // 2. Compile Sketch
+    // 2. Compile Sketch and other source files
+    let mut extra_obj_files = Vec::new();
+    let project_entries = fs::read_dir(&project_dir).map_err(|e| e.to_string())?;
+
+    for entry in project_entries {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        let file_name = path.file_name().unwrap().to_string_lossy();
+        let extension = path.extension().and_then(|s| s.to_str());
+
+        // Skip sketch.ino as it's handled separately or skip if it's the main sketch_path
+        if path == sketch_path {
+            continue;
+        }
+
+        if let Some(ext) = extension {
+            if ext == "cpp" || ext == "c" {
+                let obj_file = path.with_extension("o");
+                extra_obj_files.push(obj_file.clone());
+
+                let mut cmd = Command::new(if ext == "cpp" { &avr_gxx } else { &avr_gcc });
+                cmd.arg("-c")
+                    .arg("-g")
+                    .arg("-Os")
+                    .arg("-ffunction-sections")
+                    .arg("-fdata-sections")
+                    .arg(format!("-mmcu={}", config.mcu))
+                    .arg(format!("-DF_CPU={}", config.f_cpu))
+                    .arg("-DARDUINO=10810");
+
+                for flag in config.extra_flags {
+                    cmd.arg(flag);
+                }
+
+                cmd.arg(format!("-I{}", arduino_core.display()))
+                    .arg(format!("-I{}", arduino_variants.display()))
+                    .arg(format!("-I{}", project_dir.display()))
+                    .arg("-include")
+                    .arg("Arduino.h")
+                    .arg(&path)
+                    .arg("-o")
+                    .arg(&obj_file);
+
+                let output = cmd.output().map_err(|e| format!("Failed to compile {}: {}", file_name, e))?;
+                if !output.status.success() {
+                    return Err(format!("Error compiling {}: {}", file_name, String::from_utf8_lossy(&output.stderr)));
+                }
+            }
+        }
+    }
+
     let mut compile_cmd = Command::new(&avr_gxx);
     compile_cmd.arg("-c")
         .arg("-g")
@@ -271,6 +342,7 @@ async fn compile_sketch(
 
     let compile_output = compile_cmd.arg(format!("-I{}", arduino_core.display()))
         .arg(format!("-I{}", arduino_variants.display()))
+        .arg(format!("-I{}", project_dir.display()))
         .arg("-include")
         .arg("Arduino.h")
         .arg("-x")
@@ -294,6 +366,10 @@ async fn compile_sketch(
         .arg("-o")
         .arg(&output_elf)
         .arg(&sketch_obj);
+
+    for obj in &extra_obj_files {
+        link_cmd.arg(obj);
+    }
 
     for obj in &core_obj_files {
         link_cmd.arg(obj);
@@ -490,6 +566,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             save_diagram,
             save_sketch,
+            save_project_files,
             load_diagram,
             compile_sketch,
             upload_hex,
