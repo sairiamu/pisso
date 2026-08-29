@@ -6,21 +6,21 @@ import React from "react";
 declare global {
   namespace JSX {
     interface IntrinsicElements {
-      "wokwi-pushbutton": any;
+      "wokwi-buzzer": any;
     }
   }
 }
 
-export const PUSHBUTTON_DEFINITION: PartDefinition = {
-  type: "wokwi-pushbutton",
-  label: "Pushbutton",
-  category: "Basic",
-  defaultAttrs: { color: "red" },
+export const BUZZER_DEFINITION: PartDefinition = {
+  type: "wokwi-buzzer",
+  label: "Buzzer",
+  category: "Actuators",
+  defaultAttrs: {},
   render: ({ attrs }) => (
     <div style={{ position: "relative", display: "inline-block" }}>
-      {React.createElement("wokwi-pushbutton", { ...attrs, className: "wokwi-pushbutton" })}
+      {React.createElement("wokwi-buzzer", { ...attrs, className: "wokwi-buzzer" })}
     </div>
   ),
 };
 
-registerPart(PUSHBUTTON_DEFINITION);
+registerPart(BUZZER_DEFINITION);
