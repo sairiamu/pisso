@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { Plus, FolderOpen, Save } from "lucide-react";
+import { LayoutDashboard, FolderHeart, Sparkles, GraduationCap, User, Save, CircuitBoard } from "lucide-react";
 import { Panel } from "../components/Panel";
 import { COLORS } from "../CONSTANTS/colors";
 import { PANEL } from "../CONSTANTS/panel";
@@ -16,13 +16,18 @@ import { UploadButton } from "./UploadButton";
 
 import { FileEntry } from "../App";
 
+export type AppView = "dashboard" | "saved" | "ai" | "classes" | "profile" | "workspace";
+
 interface AppShellProps {
   children: React.ReactNode;
+  view: AppView;
+  onViewChange: (view: AppView) => void;
   mode: AppMode;
   onModeChange: (mode: AppMode) => void;
   onNewProject?: () => void;
   onOpenProject?: () => void;
   onSaveProject?: () => void;
+  onCloseProject?: () => void;
   saveDisabled?: boolean;
   lastHex?: string | null;
   isSimulating?: boolean;
@@ -38,6 +43,8 @@ interface AppShellProps {
  */
 export const AppShell: React.FC<AppShellProps> = ({
   children,
+  view,
+  onViewChange,
   mode,
   onModeChange,
   onNewProject,
@@ -261,78 +268,128 @@ export const AppShell: React.FC<AppShellProps> = ({
               height: "100%",
             }}
           >
-            {/* Nav Rail Icons (Placeholders/Actions) */}
+            {/* Nav Rail Icons */}
+            {projectPath && (
+              <button
+                onClick={() => onViewChange("workspace")}
+                title="Active Workspace"
+                style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "8px",
+                  backgroundColor: view === "workspace" ? COLORS.SOLDER_COPPER : "transparent",
+                  border: "none",
+                  color: view === "workspace" ? COLORS.WARM_WHITE : COLORS.FOG,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  transition: "all 0.2s ease",
+                  marginBottom: "4px",
+                  borderBottom: `2px solid ${COLORS.GRAPHITE_500}`
+                }}
+              >
+                <CircuitBoard size={22} />
+              </button>
+            )}
             <button
-              onClick={onNewProject}
-              title="New Project"
+              onClick={() => onViewChange("dashboard")}
+              title="Dashboard"
               style={{
-                width: "32px",
-                height: "32px",
-                borderRadius: "6px",
-                backgroundColor: COLORS.GRAPHITE_500,
-                opacity: 0.8,
-                border: `1px solid ${COLORS.GRAPHITE_500}`,
-                color: COLORS.WARM_WHITE,
+                width: "36px",
+                height: "36px",
+                borderRadius: "8px",
+                backgroundColor: view === "dashboard" ? COLORS.SOLDER_COPPER : "transparent",
+                border: "none",
+                color: view === "dashboard" ? COLORS.WARM_WHITE : COLORS.FOG,
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                transition: "all 0.2s ease"
               }}
             >
-              <Plus size={18} />
+              <LayoutDashboard size={22} />
             </button>
             <button
-              onClick={onOpenProject}
-              title="Open Project"
+              onClick={() => onViewChange("saved")}
+              title="Saved Projects"
               style={{
-                width: "32px",
-                height: "32px",
-                borderRadius: "6px",
-                backgroundColor: COLORS.GRAPHITE_500,
-                opacity: 0.5,
-                border: `1px solid ${COLORS.GRAPHITE_500}`,
-                color: COLORS.WARM_WHITE,
+                width: "36px",
+                height: "36px",
+                borderRadius: "8px",
+                backgroundColor: view === "saved" ? COLORS.SOLDER_COPPER : "transparent",
+                border: "none",
+                color: view === "saved" ? COLORS.WARM_WHITE : COLORS.FOG,
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                transition: "all 0.2s ease"
               }}
             >
-              <FolderOpen size={16} />
+              <FolderHeart size={22} />
             </button>
             <button
-              onClick={onSaveProject}
-              disabled={saveDisabled}
-              title="Save Project"
+              onClick={() => onViewChange("ai")}
+              title="AI Assistant"
               style={{
-                width: "32px",
-                height: "32px",
-                borderRadius: "6px",
-                backgroundColor: COLORS.GRAPHITE_500,
-                opacity: saveDisabled ? 0.2 : 0.5,
-                border: `1px solid ${COLORS.GRAPHITE_500}`,
-                color: COLORS.WARM_WHITE,
-                cursor: saveDisabled ? "default" : "pointer",
+                width: "36px",
+                height: "36px",
+                borderRadius: "8px",
+                backgroundColor: view === "ai" ? COLORS.SOLDER_COPPER : "transparent",
+                border: "none",
+                color: view === "ai" ? COLORS.WARM_WHITE : COLORS.FOG,
+                cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                transition: "all 0.2s ease"
               }}
             >
-              <Save size={16} />
+              <Sparkles size={22} />
+            </button>
+            <button
+              onClick={() => onViewChange("classes")}
+              title="Classes"
+              style={{
+                width: "36px",
+                height: "36px",
+                borderRadius: "8px",
+                backgroundColor: view === "classes" ? COLORS.SOLDER_COPPER : "transparent",
+                border: "none",
+                color: view === "classes" ? COLORS.WARM_WHITE : COLORS.FOG,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.2s ease"
+              }}
+            >
+              <GraduationCap size={22} />
             </button>
 
-            <div
-              style={{
-                marginTop: "auto",
-                marginBottom: PANEL.SPACING.RAIL,
-                width: "32px",
-                height: "32px",
-                borderRadius: "6px",
-                backgroundColor: COLORS.GRAPHITE_500,
-                opacity: 0.2,
-                border: `1px solid ${COLORS.GRAPHITE_500}`
-              }}
-            />
+            <div style={{ marginTop: "auto", marginBottom: PANEL.SPACING.RAIL }}>
+              <button
+                onClick={() => onViewChange("profile")}
+                title="Profile & Settings"
+                style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "8px",
+                  backgroundColor: view === "profile" ? COLORS.SOLDER_COPPER : "transparent",
+                  border: "none",
+                  color: view === "profile" ? COLORS.WARM_WHITE : COLORS.FOG,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  transition: "all 0.2s ease"
+                }}
+              >
+                <User size={22} />
+              </button>
+            </div>
           </div>
         </Panel>
       </div>
@@ -347,88 +404,110 @@ export const AppShell: React.FC<AppShellProps> = ({
           minWidth: 0
         }}
       >
-        {/* Top Header with Toggle and Action Buttons */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "8px",
-            padding: "0 4px"
-          }}
-        >
-          <ModeSwitcher mode={mode} onModeChange={onModeChange} />
+        {/* Top Header with Toggle and Action Buttons - Only visible in Workspace */}
+        {view === "workspace" && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "8px",
+              padding: "0 4px"
+            }}
+          >
+            <ModeSwitcher mode={mode} onModeChange={onModeChange} />
 
-          <div style={{ display: "flex", gap: "10px" }}>
-            <button
-              onClick={() => setBottomPanel(bottomPanel === 'terminal' ? null : 'terminal')}
-              style={{
-                backgroundColor: bottomPanel === 'terminal' ? COLORS.SOLDER_COPPER : COLORS.GRAPHITE_500,
-                color: COLORS.WARM_WHITE,
-                border: "none",
-                padding: "6px 16px",
-                borderRadius: "6px",
-                fontFamily: TYPOGRAPHY.UI,
-                fontSize: "12px",
-                fontWeight: 600,
-                cursor: "pointer",
-                transition: "background-color 0.2s ease"
-              }}
-            >
-              TERMINAL
-            </button>
-            <button
-              onClick={() => setBottomPanel(bottomPanel === 'graph' ? null : 'graph')}
-              style={{
-                backgroundColor: bottomPanel === 'graph' ? COLORS.SOLDER_COPPER : COLORS.GRAPHITE_500,
-                color: COLORS.WARM_WHITE,
-                border: "none",
-                padding: "6px 16px",
-                borderRadius: "6px",
-                fontFamily: TYPOGRAPHY.UI,
-                fontSize: "12px",
-                fontWeight: 600,
-                cursor: "pointer",
-                transition: "background-color 0.2s ease"
-              }}
-            >
-              GRAPH
-            </button>
-            <button
-              onClick={handleSimulate}
-              style={{
-                backgroundColor: isSimulating ? COLORS.TRACE_GREEN : COLORS.SOLDER_COPPER,
-                color: COLORS.WARM_WHITE,
-                border: "none",
-                padding: "6px 20px",
-                borderRadius: "6px",
-                fontFamily: TYPOGRAPHY.UI,
-                fontSize: "12px",
-                fontWeight: 700,
-                cursor: "pointer",
-                boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
-                transition: "background-color 0.2s ease"
-              }}
-            >
-              {isSimulating ? "STOP SIM" : "SIMULATE"}
-            </button>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                onClick={() => setBottomPanel(bottomPanel === 'terminal' ? null : 'terminal')}
+                style={{
+                  backgroundColor: bottomPanel === 'terminal' ? COLORS.SOLDER_COPPER : COLORS.GRAPHITE_500,
+                  color: COLORS.WARM_WHITE,
+                  border: "none",
+                  padding: "6px 16px",
+                  borderRadius: "6px",
+                  fontFamily: TYPOGRAPHY.UI,
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "background-color 0.2s ease"
+                }}
+              >
+                TERMINAL
+              </button>
+              <button
+                onClick={() => setBottomPanel(bottomPanel === 'graph' ? null : 'graph')}
+                style={{
+                  backgroundColor: bottomPanel === 'graph' ? COLORS.SOLDER_COPPER : COLORS.GRAPHITE_500,
+                  color: COLORS.WARM_WHITE,
+                  border: "none",
+                  padding: "6px 16px",
+                  borderRadius: "6px",
+                  fontFamily: TYPOGRAPHY.UI,
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "background-color 0.2s ease"
+                }}
+              >
+                GRAPH
+              </button>
+              <button
+                onClick={handleSimulate}
+                style={{
+                  backgroundColor: isSimulating ? COLORS.TRACE_GREEN : COLORS.SOLDER_COPPER,
+                  color: COLORS.WARM_WHITE,
+                  border: "none",
+                  padding: "6px 20px",
+                  borderRadius: "6px",
+                  fontFamily: TYPOGRAPHY.UI,
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                  transition: "background-color 0.2s ease"
+                }}
+              >
+                {isSimulating ? "STOP SIM" : "SIMULATE"}
+              </button>
 
-            <PortSelector
-              projectPath={projectPath || null}
-              onPortSelect={setSelectedPort}
-            />
+              <PortSelector
+                projectPath={projectPath || null}
+                onPortSelect={setSelectedPort}
+              />
 
-            <UploadButton
-              projectPath={projectPath || null}
-              selectedPort={selectedPort}
-              hasHex={!!lastHex}
-              files={files}
-              onCompileSuccess={onCompileSuccess}
-              onOutput={appendBuildOutput}
-              onUploadSuccess={handleUploadSuccess}
-            />
+              <UploadButton
+                projectPath={projectPath || null}
+                selectedPort={selectedPort}
+                hasHex={!!lastHex}
+                files={files}
+                onCompileSuccess={onCompileSuccess}
+                onOutput={appendBuildOutput}
+                onUploadSuccess={handleUploadSuccess}
+              />
+
+              <button
+                onClick={onSaveProject}
+                disabled={saveDisabled}
+                title="Save Project"
+                style={{
+                  backgroundColor: COLORS.GRAPHITE_500,
+                  color: COLORS.WARM_WHITE,
+                  border: "none",
+                  padding: "6px 12px",
+                  borderRadius: "6px",
+                  cursor: saveDisabled ? "default" : "pointer",
+                  opacity: saveDisabled ? 0.5 : 1,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center"
+                }}
+              >
+                <Save size={16} />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Outer frame for center content */}
         <div

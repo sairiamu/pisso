@@ -1,13 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { CanvasShell, CanvasShellHandle } from "./canvas/CanvasShell";
-import { AppShell } from "./canvas/AppShell";
+import { AppShell, AppView } from "./canvas/AppShell";
 import { AppMode } from "./canvas/ModeSwitcher";
 import { saveProject, loadProject } from "./diagram";
 import { ToolBox } from "./canvas/ToolBox";
 import { CodeEditor } from "./components/CodeEditor";
 import { EditorTabs } from "./canvas/EditorTabs";
 import { useSimulation } from "./simulator/SimulationContext";
+import { Dashboard } from "./views/Dashboard";
+import { AIView } from "./views/AI";
+import { ClassesView } from "./views/Classes";
+import { SavedView } from "./views/Saved";
+import { ProfileView } from "./views/Profile";
 
 export interface FileEntry {
   name: string;
@@ -34,6 +39,7 @@ void loop() {
 function App() {
   const [error, setError] = useState<string | null>(null);
   const [projectPath, setProjectPath] = useState<string | null>(null);
+  const [view, setView] = useState<AppView>("dashboard");
   const [files, setFiles] = useState<FileEntry[]>([
     { name: "sketch.ino", content: INITIAL_CODE }
   ]);
@@ -75,24 +81,39 @@ function App() {
     return () => window.removeEventListener("error", handleError);
   }, []);
 
-  const handleNewProject = async () => {
-    const selected = await open({
-      directory: true,
-      multiple: false,
-      title: "Select Project Folder"
-    });
-    if (selected && typeof selected === 'string') {
-      setProjectPath(selected);
-      canvasRef.current?.setDiagram({ version: 1, parts: [], connections: [] });
-    }
+  const handleNewProject = async (name: string) => {
+    setProjectPath(null); // Reset path for a truly new, unsaved project
+    canvasRef.current?.setDiagram({ version: 1, parts: [], connections: [] });
+    setFiles([{ name: "sketch.ino", content: INITIAL_CODE }]);
+    setView("workspace");
+    setDebugStatus(`Project "${name}" initialized.`);
+    setTimeout(() => setDebugStatus(""), 2000);
   };
 
   const handleSave = async () => {
-    if (!projectPath || !canvasRef.current) return;
+    let currentPath = projectPath;
+
+    if (!currentPath) {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "Select Folder to Save Project"
+      });
+      if (selected && typeof selected === 'string') {
+        currentPath = selected;
+        setProjectPath(selected);
+      } else {
+        return; // User cancelled
+      }
+    }
+
+    if (!canvasRef.current) return;
     try {
       const diagram = canvasRef.current.getDiagram();
-      await saveProject(projectPath, diagram);
-      alert("Project saved to " + projectPath);
+      await saveProject(currentPath, diagram);
+      // Also save the code files
+      await invoke("save_project_files", { projectPath: currentPath, files });
+      alert("Project saved to " + currentPath);
     } catch (e) {
       setError(String(e));
     }
@@ -109,10 +130,17 @@ function App() {
         const diagram = await loadProject(selected);
         setProjectPath(selected);
         canvasRef.current?.setDiagram(diagram);
+        setView("workspace");
       } catch (e) {
         setError("Failed to load project: " + e);
       }
     }
+  };
+
+  const handleCloseProject = () => {
+    setProjectPath(null);
+    canvasRef.current?.setDiagram({ version: 1, parts: [], connections: [] });
+    setView("dashboard");
   };
 
   const handleAddPart = useCallback((type: string) => {
@@ -139,12 +167,15 @@ function App() {
 
   return (
     <AppShell
+      view={view}
+      onViewChange={setView}
       mode={mode}
       onModeChange={setMode}
       onNewProject={handleNewProject}
       onOpenProject={handleOpen}
       onSaveProject={handleSave}
-      saveDisabled={!projectPath}
+      onCloseProject={handleCloseProject}
+      saveDisabled={false}
       lastHex={lastHex}
       isSimulating={isSimulating}
       onSimulateToggle={setIsSimulating}
@@ -157,10 +188,36 @@ function App() {
           {debugStatus}
         </div>
       )}
-      {/* Design Mode Content */}
+
+      {/* Dashboard View */}
+      {view === "dashboard" && (
+        <Dashboard
+          onNewProject={handleNewProject}
+          onOpenProject={handleOpen}
+          onSaveProject={handleSave}
+          onCloseProject={handleCloseProject}
+          onSelectView={setView}
+          onSelectMode={setMode}
+          projectPath={projectPath}
+        />
+      )}
+
+      {/* Saved View */}
+      {view === "saved" && <SavedView onOpenProject={handleOpen} />}
+
+      {/* AI View */}
+      {view === "ai" && <AIView />}
+
+      {/* Classes View */}
+      {view === "classes" && <ClassesView />}
+
+      {/* Profile View */}
+      {view === "profile" && <ProfileView />}
+
+      {/* Design Mode Content - Only visible in Workspace */}
       <div
         style={{
-          display: mode === "design" ? "flex" : "none",
+          display: (view === "workspace" && mode === "design") ? "flex" : "none",
           height: "100%",
           width: "100%",
           position: "relative",
@@ -175,10 +232,10 @@ function App() {
         </div>
       </div>
 
-      {/* Code Mode Content */}
+      {/* Code Mode Content - Only visible in Workspace */}
       <div
         style={{
-          display: mode === "code" ? "flex" : "none",
+          display: (view === "workspace" && mode === "code") ? "flex" : "none",
           height: "100%",
           width: "100%",
           flexDirection: "column",
