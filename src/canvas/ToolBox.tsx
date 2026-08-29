@@ -127,6 +127,13 @@ export const ToolBox: React.FC<ToolBoxProps> = ({ onAddPart }) => {
         gap: "12px",
       }}
     >
+      <style>
+        {`
+          .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+          }
+        `}
+      </style>
       <button
         onClick={() => setIsOpen(!isOpen)}
         style={{
@@ -166,6 +173,7 @@ export const ToolBox: React.FC<ToolBoxProps> = ({ onAddPart }) => {
             boxShadow: "0 24px 64px rgba(0,0,0,0.7)",
             border: `1px solid ${COLORS.GRAPHITE_500}`,
             backgroundColor: COLORS.GRAPHITE_700,
+            overflow: "hidden", // Ensure content is contained for scrolling
           }}
         >
           <div style={{ marginBottom: PANEL.SPACING.XL }}>
@@ -206,6 +214,7 @@ export const ToolBox: React.FC<ToolBoxProps> = ({ onAddPart }) => {
           />
 
           <div
+            className="hide-scrollbar"
             style={{
               flex: 1,
               overflowY: "auto",
@@ -213,6 +222,9 @@ export const ToolBox: React.FC<ToolBoxProps> = ({ onAddPart }) => {
               display: "flex",
               flexDirection: "column",
               gap: PANEL.SPACING.XXL,
+              minHeight: 0, // Critical for flex-based scrolling
+              scrollbarWidth: "none", // Firefox
+              msOverflowStyle: "none", // IE 10+
             }}
           >
             {Object.entries(groupedParts).map(([category, parts]) => (

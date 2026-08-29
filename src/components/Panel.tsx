@@ -64,6 +64,7 @@ export const Panel: React.FC<PanelProps> = ({
         display: style?.display === "flex" ? "flex" : "block",
         flexDirection: style?.flexDirection,
         flex: style?.display === "flex" ? 1 : undefined,
+        minHeight: style?.display === "flex" ? 0 : undefined,
       }}>
         {children}
       </div>
