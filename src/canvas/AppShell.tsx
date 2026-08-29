@@ -247,86 +247,92 @@ export const AppShell: React.FC<AppShellProps> = ({
           style={{
             width: "60px",
             height: "100%",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            paddingTop: PANEL.SPACING.XL,
-            gap: PANEL.SPACING.XL,
             borderRadius: "10px",
           }}
         >
-          {/* Nav Rail Icons (Placeholders/Actions) */}
-          <button
-            onClick={onNewProject}
-            title="New Project"
-            style={{
-              width: "32px",
-              height: "32px",
-              borderRadius: "6px",
-              backgroundColor: COLORS.GRAPHITE_500,
-              opacity: 0.8,
-              border: `1px solid ${COLORS.GRAPHITE_500}`,
-              color: COLORS.WARM_WHITE,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Plus size={18} />
-          </button>
-          <button
-            onClick={onOpenProject}
-            title="Open Project"
-            style={{
-              width: "32px",
-              height: "32px",
-              borderRadius: "6px",
-              backgroundColor: COLORS.GRAPHITE_500,
-              opacity: 0.5,
-              border: `1px solid ${COLORS.GRAPHITE_500}`,
-              color: COLORS.WARM_WHITE,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <FolderOpen size={16} />
-          </button>
-          <button
-            onClick={onSaveProject}
-            disabled={saveDisabled}
-            title="Save Project"
-            style={{
-              width: "32px",
-              height: "32px",
-              borderRadius: "6px",
-              backgroundColor: COLORS.GRAPHITE_500,
-              opacity: saveDisabled ? 0.2 : 0.5,
-              border: `1px solid ${COLORS.GRAPHITE_500}`,
-              color: COLORS.WARM_WHITE,
-              cursor: saveDisabled ? "default" : "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Save size={16} />
-          </button>
-
           <div
             style={{
-              marginTop: "auto",
-              marginBottom: PANEL.SPACING.XL,
-              width: "32px",
-              height: "32px",
-              borderRadius: "6px",
-              backgroundColor: COLORS.GRAPHITE_500,
-              opacity: 0.2,
-              border: `1px solid ${COLORS.GRAPHITE_500}`
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              paddingTop: PANEL.SPACING.RAIL,
+              gap: PANEL.SPACING.RAIL,
+              height: "100%",
             }}
-          />
+          >
+            {/* Nav Rail Icons (Placeholders/Actions) */}
+            <button
+              onClick={onNewProject}
+              title="New Project"
+              style={{
+                width: "32px",
+                height: "32px",
+                borderRadius: "6px",
+                backgroundColor: COLORS.GRAPHITE_500,
+                opacity: 0.8,
+                border: `1px solid ${COLORS.GRAPHITE_500}`,
+                color: COLORS.WARM_WHITE,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Plus size={18} />
+            </button>
+            <button
+              onClick={onOpenProject}
+              title="Open Project"
+              style={{
+                width: "32px",
+                height: "32px",
+                borderRadius: "6px",
+                backgroundColor: COLORS.GRAPHITE_500,
+                opacity: 0.5,
+                border: `1px solid ${COLORS.GRAPHITE_500}`,
+                color: COLORS.WARM_WHITE,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <FolderOpen size={16} />
+            </button>
+            <button
+              onClick={onSaveProject}
+              disabled={saveDisabled}
+              title="Save Project"
+              style={{
+                width: "32px",
+                height: "32px",
+                borderRadius: "6px",
+                backgroundColor: COLORS.GRAPHITE_500,
+                opacity: saveDisabled ? 0.2 : 0.5,
+                border: `1px solid ${COLORS.GRAPHITE_500}`,
+                color: COLORS.WARM_WHITE,
+                cursor: saveDisabled ? "default" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Save size={16} />
+            </button>
+
+            <div
+              style={{
+                marginTop: "auto",
+                marginBottom: PANEL.SPACING.RAIL,
+                width: "32px",
+                height: "32px",
+                borderRadius: "6px",
+                backgroundColor: COLORS.GRAPHITE_500,
+                opacity: 0.2,
+                border: `1px solid ${COLORS.GRAPHITE_500}`
+              }}
+            />
+          </div>
         </Panel>
       </div>
 

@@ -21,6 +21,7 @@ export const PANEL = {
     LG: "16px",
     XL: "24px",
     XXL: "32px",
+    RAIL: "20px",
   },
 } as const;
 
