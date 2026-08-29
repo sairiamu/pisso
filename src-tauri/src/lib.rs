@@ -96,11 +96,101 @@ fn list_serial_ports() -> Result<Vec<SerialPortInfo>, String> {
 }
 
 #[tauri::command]
+fn save_full_project(
+    project_path: String,
+    diagram_json: String,
+    files: Vec<ProjectFile>,
+) -> Result<(), String> {
+    // 1. Save Design
+    let mut design_path = PathBuf::from(&project_path);
+    design_path.push("design");
+    if !design_path.exists() {
+        fs::create_dir_all(&design_path).map_err(|e| e.to_string())?;
+    }
+    design_path.push("diagram.json");
+    fs::write(design_path, diagram_json).map_err(|e| e.to_string())?;
+
+    // 2. Save Code
+    let mut code_path = PathBuf::from(&project_path);
+    code_path.push("code");
+    if !code_path.exists() {
+        fs::create_dir_all(&code_path).map_err(|e| e.to_string())?;
+    }
+    for file in files {
+        let mut file_path = code_path.clone();
+        file_path.push(file.name);
+        fs::write(file_path, file.content).map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 fn save_diagram(project_path: String, diagram_json: String) -> Result<(), String> {
     let mut path = PathBuf::from(project_path);
+    path.push("design");
+    if !path.exists() {
+        fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+    }
     path.push("diagram.json");
 
     fs::write(path, diagram_json).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_projects_path(app_handle: tauri::AppHandle) -> Result<String, String> {
+    let mut path = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+    path.push("projects");
+
+    if !path.exists() {
+        fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+    }
+
+    Ok(clean_path(path).to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn list_projects(app_handle: tauri::AppHandle) -> Result<Vec<String>, String> {
+    let app_data = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+
+    let search_paths = vec![app_data.join("projects"), app_data.join("playground")];
+    let mut projects = Vec::new();
+
+    for path in search_paths {
+        if !path.exists() {
+            continue;
+        }
+
+        let entries = fs::read_dir(path).map_err(|e| e.to_string())?;
+        for entry in entries {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let p = entry.path();
+            if p.is_dir() {
+                let mut diag = p.clone();
+                diag.push("design");
+                diag.push("diagram.json");
+
+                let mut meta = p.clone();
+                meta.push("project.json");
+
+                // Also check for legacy projects in root
+                let mut legacy = p.clone();
+                legacy.push("diagram.json");
+
+                if diag.exists() || meta.exists() || legacy.exists() {
+                    projects.push(clean_path(p).to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+
+    projects.sort();
+    projects.dedup();
+
+    Ok(projects)
 }
 
 #[tauri::command]
@@ -126,7 +216,8 @@ struct ProjectFile {
 
 #[tauri::command]
 fn save_project_files(project_path: String, files: Vec<ProjectFile>) -> Result<(), String> {
-    let path = PathBuf::from(project_path);
+    let mut path = PathBuf::from(project_path);
+    path.push("code");
     if !path.exists() {
         fs::create_dir_all(&path).map_err(|e| e.to_string())?;
     }
@@ -139,19 +230,73 @@ fn save_project_files(project_path: String, files: Vec<ProjectFile>) -> Result<(
 }
 
 #[tauri::command]
-fn save_sketch(project_path: String, sketch_code: String) -> Result<(), String> {
-    let mut path = PathBuf::from(project_path);
-    path.push("sketch.ino");
+fn load_project_files(project_path: String) -> Result<Vec<ProjectFile>, String> {
+    let mut path = PathBuf::from(&project_path);
+    path.push("code");
 
-    fs::write(path, sketch_code).map_err(|e| e.to_string())
+    let load_from = if path.exists() {
+        path
+    } else {
+        PathBuf::from(&project_path)
+    };
+
+    let entries = fs::read_dir(load_from).map_err(|e| e.to_string())?;
+    let mut files = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        if path.is_file() {
+            let extension = path.extension().and_then(|s| s.to_str());
+            if let Some(ext) = extension {
+                // Only load code-related files
+                if ext == "ino" || ext == "cpp" || ext == "h" || ext == "c" || ext == "hpp" {
+                    let name = path.file_name().unwrap().to_string_lossy().to_string();
+                    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+                    files.push(ProjectFile { name, content });
+                }
+            }
+        }
+    }
+    Ok(files)
+}
+
+#[tauri::command]
+fn save_project_metadata(project_path: String, metadata_json: String) -> Result<(), String> {
+    let mut path = PathBuf::from(project_path);
+    if !path.exists() {
+        fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+    }
+    path.push("project.json");
+
+    fs::write(path, metadata_json).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn load_project_metadata(project_path: String) -> Result<String, String> {
+    let mut path = PathBuf::from(project_path);
+    path.push("project.json");
+
+    if !path.exists() {
+        return Ok("{}".to_string());
+    }
+
+    fs::read_to_string(path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn load_diagram(project_path: String) -> Result<String, String> {
-    let mut path = PathBuf::from(project_path);
+    let mut path = PathBuf::from(&project_path);
+    path.push("design");
     path.push("diagram.json");
 
-    fs::read_to_string(path).map_err(|e| e.to_string())
+    if path.exists() {
+        fs::read_to_string(path).map_err(|e| e.to_string())
+    } else {
+        // Fallback to root for existing projects
+        let mut old_path = PathBuf::from(project_path);
+        old_path.push("diagram.json");
+        fs::read_to_string(old_path).map_err(|e| e.to_string())
+    }
 }
 
 #[tauri::command]
@@ -564,10 +709,15 @@ pub fn run() {
             serial_port: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
+            list_projects,
+            get_projects_path,
+            save_full_project,
             save_diagram,
-            save_sketch,
             save_project_files,
+            load_project_files,
             load_diagram,
+            save_project_metadata,
+            load_project_metadata,
             compile_sketch,
             upload_hex,
             get_playground_path,

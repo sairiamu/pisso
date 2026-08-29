@@ -3,7 +3,15 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { CanvasShell, CanvasShellHandle } from "./canvas/CanvasShell";
 import { AppShell, AppView } from "./canvas/AppShell";
 import { AppMode } from "./canvas/ModeSwitcher";
-import { saveProject, loadProject } from "./diagram";
+import {
+  saveProject,
+  loadProject,
+  saveProjectFiles,
+  loadProjectFiles,
+  saveProjectMetadata,
+  loadProjectMetadata,
+  saveFullProject
+} from "./diagram";
 import { ToolBox } from "./canvas/ToolBox";
 import { CodeEditor } from "./components/CodeEditor";
 import { EditorTabs } from "./canvas/EditorTabs";
@@ -13,6 +21,8 @@ import { AIView } from "./views/AI";
 import { ClassesView } from "./views/Classes";
 import { SavedView } from "./views/Saved";
 import { ProfileView } from "./views/Profile";
+import { X } from "lucide-react";
+import { COLORS } from "./CONSTANTS/colors";
 
 export interface FileEntry {
   name: string;
@@ -48,6 +58,9 @@ function App() {
   const [lastHex, setLastHex] = useState<string | null>(null);
   const [mode, setMode] = useState<AppMode>("design");
   const [debugStatus, setDebugStatus] = useState<string>("");
+  const [isNaming, setIsNaming] = useState(false);
+  const [projectName, setProjectName] = useState("");
+  const [isProjectActive, setIsProjectActive] = useState(false);
   const canvasRef = useRef<CanvasShellHandle>(null);
 
   const activeFile = files[activeFileIndex] || files[0];
@@ -82,12 +95,57 @@ function App() {
   }, []);
 
   const handleNewProject = async (name: string) => {
-    setProjectPath(null); // Reset path for a truly new, unsaved project
-    canvasRef.current?.setDiagram({ version: 1, parts: [], connections: [] });
-    setFiles([{ name: "sketch.ino", content: INITIAL_CODE }]);
+    // 1. Immediately reset state and navigate to workspace
+    // This makes the UI responsive to the user's "Create" action
     setView("workspace");
-    setDebugStatus(`Project "${name}" initialized.`);
-    setTimeout(() => setDebugStatus(""), 2000);
+    setMode("design");
+    setProjectPath(null);
+    setFiles([{ name: "sketch.ino", content: INITIAL_CODE }]);
+    setActiveFileIndex(0);
+    setIsProjectActive(true);
+
+    // Ensure canvas is cleared
+    setTimeout(() => {
+      canvasRef.current?.setDiagram({ version: 1, parts: [], connections: [] });
+    }, 50);
+
+    // 2. Open the folder picker to satisfy the "proper project directory" requirement
+    let defaultPath: string | undefined;
+    try {
+      defaultPath = await invoke<string>("get_projects_path");
+    } catch (e) {
+      console.warn("Failed to get default projects path", e);
+    }
+
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      defaultPath,
+      title: `Select Parent Folder for "${name}"`
+    });
+
+    if (selected && typeof selected === 'string') {
+      const newProjectPath = `${selected}/${name}`;
+      setProjectPath(newProjectPath);
+
+      setDebugStatus(`Project "${name}" initialized at ${newProjectPath}`);
+      setTimeout(() => setDebugStatus(""), 3000);
+    } else {
+      // User cancelled folder selection - they are still in Workspace
+      // but the project remains "Unsaved" (projectPath is null)
+      setDebugStatus("Project initialized (Unsaved)");
+      setTimeout(() => setDebugStatus(""), 2000);
+    }
+  };
+
+  const handleCreateProjectSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (projectName.trim()) {
+      const name = projectName.trim();
+      setIsNaming(false);
+      setProjectName("");
+      handleNewProject(name);
+    }
   };
 
   const handleSave = async () => {
@@ -110,27 +168,58 @@ function App() {
     if (!canvasRef.current) return;
     try {
       const diagram = canvasRef.current.getDiagram();
-      await saveProject(currentPath, diagram);
-      // Also save the code files
-      await invoke("save_project_files", { projectPath: currentPath, files });
-      alert("Project saved to " + currentPath);
+
+      // Save everything (Design + Code) in one atomic-like operation
+      await saveFullProject(currentPath, diagram, files);
+
+      // Save metadata separately as it's not core project data
+      await saveProjectMetadata(currentPath, { activeFileIndex });
+
+      setDebugStatus("Project saved successfully");
+      setTimeout(() => setDebugStatus(""), 2000);
     } catch (e) {
-      setError(String(e));
+      setError(`Save Failed: ${e}`);
+      console.error("Project save error:", e);
     }
   };
 
-  const handleOpen = async () => {
-    const selected = await open({
-      directory: true,
-      multiple: false,
-      title: "Open Project Folder"
-    });
-    if (selected && typeof selected === 'string') {
+  const handleOpen = async (path?: string) => {
+    let selected: string | null = null;
+
+    if (path) {
+      selected = path;
+    } else {
+      const result = await open({
+        directory: true,
+        multiple: false,
+        title: "Open Project Folder"
+      });
+      if (result && typeof result === 'string') {
+        selected = result;
+      }
+    }
+
+    if (selected) {
       try {
         const diagram = await loadProject(selected);
+        const projectFiles = await loadProjectFiles(selected);
+        const metadata = await loadProjectMetadata(selected);
+
         setProjectPath(selected);
         canvasRef.current?.setDiagram(diagram);
+
+        if (projectFiles.length > 0) {
+          setFiles(projectFiles);
+          if (metadata && typeof metadata.activeFileIndex === 'number' && metadata.activeFileIndex < projectFiles.length) {
+            setActiveFileIndex(metadata.activeFileIndex);
+          } else {
+            setActiveFileIndex(0);
+          }
+        }
+
+        setIsProjectActive(true);
         setView("workspace");
+        setMode("design"); // Default to design when opening
       } catch (e) {
         setError("Failed to load project: " + e);
       }
@@ -139,6 +228,7 @@ function App() {
 
   const handleCloseProject = () => {
     setProjectPath(null);
+    setIsProjectActive(false);
     canvasRef.current?.setDiagram({ version: 1, parts: [], connections: [] });
     setView("dashboard");
   };
@@ -171,7 +261,7 @@ function App() {
       onViewChange={setView}
       mode={mode}
       onModeChange={setMode}
-      onNewProject={handleNewProject}
+      onNewProject={() => setIsNaming(true)}
       onOpenProject={handleOpen}
       onSaveProject={handleSave}
       onCloseProject={handleCloseProject}
@@ -180,9 +270,96 @@ function App() {
       isSimulating={isSimulating}
       onSimulateToggle={setIsSimulating}
       projectPath={projectPath}
+      isProjectActive={isProjectActive}
       files={files}
       onCompileSuccess={setLastHex}
     >
+      {isNaming && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(0,0,0,0.85)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 20000
+        }}>
+          <div style={{
+            backgroundColor: COLORS.GRAPHITE_700,
+            border: `1px solid ${COLORS.GRAPHITE_500}`,
+            borderRadius: "12px",
+            padding: "32px",
+            width: "400px",
+            boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
+            position: "relative"
+          }}>
+            <button
+              onClick={() => setIsNaming(false)}
+              style={{ position: "absolute", top: "16px", right: "16px", background: "none", border: "none", cursor: "pointer", color: COLORS.FOG }}
+            >
+              <X size={20} />
+            </button>
+            <h2 style={{ color: COLORS.WARM_WHITE, marginTop: 0, marginBottom: "24px" }}>New Project</h2>
+            <form onSubmit={handleCreateProjectSubmit}>
+              <div style={{ marginBottom: "24px" }}>
+                <label style={{ display: "block", color: COLORS.FOG, fontSize: "12px", marginBottom: "8px" }}>PROJECT NAME</label>
+                <input
+                  autoFocus
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  placeholder="My Awesome Project"
+                  style={{
+                    width: "100%",
+                    backgroundColor: COLORS.GRAPHITE_900,
+                    border: `1px solid ${COLORS.GRAPHITE_500}`,
+                    borderRadius: "6px",
+                    padding: "12px",
+                    color: COLORS.WARM_WHITE,
+                    fontSize: "14px",
+                    outline: "none"
+                  }}
+                />
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px" }}>
+                <button
+                  type="button"
+                  onClick={() => setIsNaming(false)}
+                  style={{
+                    backgroundColor: "transparent",
+                    color: COLORS.WARM_WHITE,
+                    border: `1px solid ${COLORS.GRAPHITE_500}`,
+                    padding: "10px 20px",
+                    borderRadius: "6px",
+                    cursor: "pointer"
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!projectName.trim()}
+                  style={{
+                    backgroundColor: COLORS.SOLDER_COPPER,
+                    color: COLORS.WARM_WHITE,
+                    border: "none",
+                    padding: "10px 24px",
+                    borderRadius: "6px",
+                    cursor: projectName.trim() ? "pointer" : "default",
+                    fontWeight: 600,
+                    opacity: projectName.trim() ? 1 : 0.5
+                  }}
+                >
+                  Create Project
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {debugStatus && (
         <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 10000, background: 'black', color: 'white', padding: '8px 16px', borderRadius: 20, border: '1px solid #C97A4B' }}>
           {debugStatus}
@@ -192,7 +369,7 @@ function App() {
       {/* Dashboard View */}
       {view === "dashboard" && (
         <Dashboard
-          onNewProject={handleNewProject}
+          onNewProject={() => setIsNaming(true)}
           onOpenProject={handleOpen}
           onSaveProject={handleSave}
           onCloseProject={handleCloseProject}

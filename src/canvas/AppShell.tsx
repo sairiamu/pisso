@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { LayoutDashboard, FolderHeart, Sparkles, GraduationCap, User, Save, CircuitBoard } from "lucide-react";
+import { LayoutDashboard, FolderHeart, Sparkles, GraduationCap, User, Save, CircuitBoard, Plus } from "lucide-react";
 import { Panel } from "../components/Panel";
 import { COLORS } from "../CONSTANTS/colors";
 import { PANEL } from "../CONSTANTS/panel";
@@ -33,6 +33,7 @@ interface AppShellProps {
   isSimulating?: boolean;
   onSimulateToggle?: (simulating: boolean) => void;
   projectPath?: string | null;
+  isProjectActive?: boolean;
   files: FileEntry[];
   onCompileSuccess?: (hex: string) => void;
 }
@@ -55,6 +56,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   isSimulating,
   onSimulateToggle,
   projectPath,
+  isProjectActive,
   files,
   onCompileSuccess,
 }) => {
@@ -269,10 +271,32 @@ export const AppShell: React.FC<AppShellProps> = ({
             }}
           >
             {/* Nav Rail Icons */}
-            {projectPath && (
+            <button
+              onClick={onNewProject}
+              title="New Project"
+              style={{
+                width: "36px",
+                height: "36px",
+                borderRadius: "8px",
+                backgroundColor: "transparent",
+                border: "none",
+                color: COLORS.SOLDER_COPPER,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.2s ease",
+                marginBottom: "8px",
+                borderBottom: `2px solid ${COLORS.GRAPHITE_500}`
+              }}
+            >
+              <Plus size={22} />
+            </button>
+
+            {isProjectActive && (
               <button
                 onClick={() => onViewChange("workspace")}
-                title="Active Workspace"
+                title="Studio (Design & Code)"
                 style={{
                   width: "36px",
                   height: "36px",

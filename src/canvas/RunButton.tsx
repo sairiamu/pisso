@@ -55,7 +55,7 @@ export const RunButton: React.FC<RunButtonProps> = ({
       // 2. Invoke the compile command
       // Find the main sketch file (sketch.ino)
       const mainSketch = files.find(f => f.name.endsWith(".ino")) || files[0];
-      const sketchPath = `${activePath}/${mainSketch.name}`;
+      const sketchPath = `${activePath}/code/${mainSketch.name}`;
 
       const hexContent = await invoke<string>("compile_sketch", {
         sketchPath,
