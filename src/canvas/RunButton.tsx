@@ -26,6 +26,7 @@ export const RunButton: React.FC<RunButtonProps> = ({
 
   const handleRun = async () => {
     let activePath = projectPath;
+    let succeeded = false;
 
     if (!activePath) {
       try {
@@ -57,6 +58,7 @@ export const RunButton: React.FC<RunButtonProps> = ({
       setStatus(successMsg);
       onOutput?.(successMsg);
       onCompileSuccess?.(hexContent);
+      succeeded = true;
     } catch (err) {
       const errorMsg = String(err);
       setStatus(`Error: ${errorMsg.split("\n")[0]}`);
@@ -65,7 +67,7 @@ export const RunButton: React.FC<RunButtonProps> = ({
     } finally {
       setIsCompiling(false);
       // Clear status after 5 seconds if successful
-      if (!status?.startsWith("Error")) {
+      if (succeeded) {
         setTimeout(() => setStatus(null), 5000);
       }
     }
