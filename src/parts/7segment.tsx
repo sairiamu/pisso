@@ -1,5 +1,6 @@
 import "@wokwi/elements";
 import { PartDefinition } from "./types";
+import { getPinValue } from "./utils";
 import React from "react";
 
 export const SEVEN_SEGMENT_DEFINITION: PartDefinition = {
@@ -20,11 +21,21 @@ export const SEVEN_SEGMENT_DEFINITION: PartDefinition = {
     { name: "COM.2", x: 4.5, y: 17 },
   ],
   defaultAttrs: { color: "red" },
-  render: ({ attrs }) => (
-    <div style={{ position: "relative", display: "inline-block" }}>
-      {React.createElement("wokwi-7segment", { ...attrs, className: "wokwi-7segment" })}
-    </div>
-  ),
+  render: ({ attrs, pinValues }) => {
+    const segments = ["A", "B", "C", "D", "E", "F", "G", "DP"];
+    const values = segments.map((seg) =>
+      getPinValue(pinValues, seg, "7 Segment") === "HIGH" ? 1 : 0
+    );
+    return (
+      <div style={{ position: "relative", display: "inline-block" }}>
+        {React.createElement("wokwi-7segment", {
+          ...attrs,
+          values,
+          className: "wokwi-7segment",
+        })}
+      </div>
+    );
+  },
 };
 
 

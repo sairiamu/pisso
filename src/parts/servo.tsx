@@ -9,7 +9,7 @@ export const SERVO_DEFINITION: PartDefinition = {
   viewBox: { x: 0, y: 0, width: 170.1, height: 151.2 },
   pins: [
     { name: "PWM", x: 37.8, y: 151.2 },
-    { name: "VCC", x: 56.7, y: 151.2 },
+    { name: "V+", x: 56.7, y: 151.2 },
     { name: "GND", x: 75.6, y: 151.2 },
   ],
   defaultAttrs: {},

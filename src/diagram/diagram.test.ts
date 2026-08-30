@@ -29,7 +29,7 @@ export function testDiagramRoundTrip() {
       {
         id: "w1",
         from: { partId: "uno1", pin: "13" },
-        to: { partId: "led1", pin: "anode" },
+        to: { partId: "led1", pin: "A" },
         route: [{ x: 200, y: 100 }, { x: 250, y: 100 }]
       }
     ]

@@ -10,7 +10,7 @@ export const LCD1602_DEFINITION: PartDefinition = {
   pins: [
     { name: "VSS", x: 28.8, y: 9.6 },
     { name: "VDD", x: 38.4, y: 9.6 },
-    { name: "VO", x: 48.0, y: 9.6 },
+    { name: "V0", x: 48.0, y: 9.6 },
     { name: "RS", x: 57.6, y: 9.6 },
     { name: "RW", x: 67.2, y: 9.6 },
     { name: "E", x: 76.8, y: 9.6 },

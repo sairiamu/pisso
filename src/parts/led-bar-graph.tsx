@@ -1,5 +1,6 @@
 import "@wokwi/elements";
 import { PartDefinition } from "./types";
+import { getPinValue } from "./utils";
 import React from "react";
 
 export const LED_BAR_GRAPH_DEFINITION: PartDefinition = {
@@ -12,11 +13,22 @@ export const LED_BAR_GRAPH_DEFINITION: PartDefinition = {
     { name: "C1", x: 1.27, y: 0 }, { name: "C2", x: 3.81, y: 0 }, { name: "C3", x: 6.35, y: 0 }, { name: "C4", x: 8.89, y: 0 }, { name: "C5", x: 11.43, y: 0 }, { name: "C6", x: 13.97, y: 0 }, { name: "C7", x: 16.51, y: 0 }, { name: "C8", x: 19.05, y: 0 }, { name: "C9", x: 21.59, y: 0 }, { name: "C10", x: 24.13, y: 0 },
   ],
   defaultAttrs: { color: "red" },
-  render: ({ attrs }) => (
-    <div style={{ position: "relative", display: "inline-block" }}>
-      {React.createElement("wokwi-led-bar-graph", { ...attrs, className: "wokwi-led-bar-graph" })}
-    </div>
-  ),
+  render: ({ attrs, pinValues }) => {
+    const values = Array.from({ length: 10 }, (_, i) => {
+      const a = getPinValue(pinValues, `A${i + 1}`, "LED Bar Graph");
+      const c = getPinValue(pinValues, `C${i + 1}`, "LED Bar Graph");
+      return a === "HIGH" && c === "LOW" ? 1 : 0;
+    });
+    return (
+      <div style={{ position: "relative", display: "inline-block" }}>
+        {React.createElement("wokwi-led-bar-graph", {
+          ...attrs,
+          values,
+          className: "wokwi-led-bar-graph",
+        })}
+      </div>
+    );
+  },
 };
 
 

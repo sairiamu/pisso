@@ -1,5 +1,6 @@
 import "@wokwi/elements";
 import { PartDefinition } from "./types";
+import { getPinValue } from "./utils";
 import React from "react";
 
 export const RGB_LED_DEFINITION: PartDefinition = {
@@ -14,11 +15,23 @@ export const RGB_LED_DEFINITION: PartDefinition = {
     { name: "B", x: 25, y: 40 },
   ],
   defaultAttrs: {},
-  render: ({ attrs }) => (
-    <div style={{ position: "relative", display: "inline-block" }}>
-      {React.createElement("wokwi-rgb-led", { ...attrs, className: "wokwi-rgb-led" })}
-    </div>
-  ),
+  render: ({ attrs, pinValues }) => {
+    const r = getPinValue(pinValues, "R", "RGB LED") === "HIGH" ? 1 : 0;
+    const g = getPinValue(pinValues, "G", "RGB LED") === "HIGH" ? 1 : 0;
+    const b = getPinValue(pinValues, "B", "RGB LED") === "HIGH" ? 1 : 0;
+
+    return (
+      <div style={{ position: "relative", display: "inline-block" }}>
+        {React.createElement("wokwi-rgb-led", {
+          ...attrs,
+          ledRed: r,
+          ledGreen: g,
+          ledBlue: b,
+          className: "wokwi-rgb-led"
+        })}
+      </div>
+    );
+  },
 };
 
 

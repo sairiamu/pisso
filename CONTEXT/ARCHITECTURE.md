@@ -44,7 +44,7 @@ Get real legal sign-off before shipping regardless.
     {
       "id": "w1",
       "from": { "partId": "uno1", "pin": "13" },
-      "to": { "partId": "led1", "pin": "anode" },
+      "to": { "partId": "led1", "pin": "A" },
       "route": []
     }
   ]

@@ -1,5 +1,6 @@
 import "@wokwi/elements";
 import { PartDefinition } from "./types";
+import { getPinValue } from "./utils";
 import React from "react";
 
 export const LED_DEFINITION: PartDefinition = {
@@ -13,7 +14,9 @@ export const LED_DEFINITION: PartDefinition = {
   ],
   defaultAttrs: { color: "red" },
   render: ({ attrs, pinValues }) => {
-    const isOn = pinValues?.anode === 'HIGH' && pinValues?.cathode === 'LOW';
+    const aValue = getPinValue(pinValues, "A", "LED");
+    const cValue = getPinValue(pinValues, "C", "LED");
+    const isOn = aValue === "HIGH" && cValue === "LOW";
     return (
       <div style={{ position: "relative", display: "inline-block" }}>
         {React.createElement("wokwi-led", { ...attrs, value: isOn, className: "wokwi-led" })}

@@ -17,7 +17,7 @@ const mockDiagram: Diagram = {
     {
       id: "w2",
       from: { partId: "bb1", pin: "1e" },
-      to: { partId: "led1", pin: "anode" }
+      to: { partId: "led1", pin: "A" }
     }
   ]
 };
@@ -25,12 +25,12 @@ const mockDiagram: Diagram = {
 function testContinuity() {
   console.log("Running Netlist Tests...");
 
-  // Test 1: Same row continuity (1a should connect to 1e and thus to led1:anode)
+  // Test 1: Same row continuity (1a should connect to 1e and thus to led1:A)
   const startPin: PinRef = { partId: "uno1", pin: "13" };
   const connected = resolveNode(mockDiagram, startPin);
 
-  const hasAnode = connected.some(p => p.partId === "led1" && p.pin === "anode");
-  console.assert(hasAnode, "FAILED: pin 13 should be connected to led1:anode via breadboard row 1");
+  const hasAnode = connected.some(p => p.partId === "led1" && p.pin === "A");
+  console.assert(hasAnode, "FAILED: pin 13 should be connected to led1:A via breadboard row 1");
 
   // Test 2: Power rail continuity
   const railStart: PinRef = { partId: "bb1", pin: "tp.0" };
