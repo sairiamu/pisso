@@ -350,6 +350,32 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
     [setNodes]
   );
 
+  const onRotatePart = useCallback(
+    (id: string) => {
+      setNodes((nds) =>
+        nds.map((node) => {
+          if (node.id === id) {
+            const current = (node.data as any).rotation || 0;
+            return {
+              ...node,
+              data: { ...node.data, rotation: (current + 90) % 360 },
+            };
+          }
+          return node;
+        })
+      );
+    },
+    [setNodes]
+  );
+
+  const onDeletePart = useCallback(
+    (id: string) => {
+      setNodes((nds) => nds.filter((node) => node.id !== id));
+      setEdges((eds) => eds.filter((edge) => edge.source !== id && edge.target !== id));
+    },
+    [setNodes, setEdges]
+  );
+
   const selectedNode = nodes.find((n) => n.selected);
   const selectedPart = useMemo<PartInstance | null>(() => {
     if (!selectedNode || selectedNode.type !== "part") return null;
@@ -420,6 +446,8 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
           <InspectorPanel
             selectedPart={selectedPart}
             onUpdateAttributes={onUpdateAttributes}
+            onRotate={() => onRotatePart(selectedPart.id)}
+            onDelete={() => onDeletePart(selectedPart.id)}
           />
         </div>
       )}

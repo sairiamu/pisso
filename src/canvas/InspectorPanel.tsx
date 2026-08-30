@@ -1,4 +1,5 @@
 import React from "react";
+import { RotateCw, Trash2 } from "lucide-react";
 import { Panel } from "../components/Panel";
 import { COLORS } from "../CONSTANTS/colors";
 import { PartInstance } from "../diagram/types";
@@ -7,6 +8,8 @@ import { PARTS_REGISTRY } from "../parts/registry";
 interface InspectorPanelProps {
   selectedPart: PartInstance | null;
   onUpdateAttributes: (id: string, attrs: Record<string, any>) => void;
+  onRotate: () => void;
+  onDelete: () => void;
 }
 
 const ATTRIBUTE_METADATA: Record<string, { label: string; type: 'text' | 'number' | 'color' | 'boolean'; key: string }[]> = {
@@ -34,6 +37,8 @@ const ATTRIBUTE_METADATA: Record<string, { label: string; type: 'text' | 'number
 export const InspectorPanel: React.FC<InspectorPanelProps> = ({
   selectedPart,
   onUpdateAttributes,
+  onRotate,
+  onDelete,
 }) => {
   if (!selectedPart) {
     return (
@@ -109,6 +114,43 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
         <p style={{ fontSize: "0.75rem", color: COLORS.FOG, margin: "4px 0" }}>
           ID: {selectedPart.id}
         </p>
+      </div>
+
+      <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
+        <button
+          onClick={onRotate}
+          title="Rotate 90°"
+          style={{
+            flex: 1,
+            display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+            backgroundColor: COLORS.GRAPHITE_900,
+            border: `1px solid ${COLORS.GRAPHITE_500}`,
+            borderRadius: "6px",
+            padding: "8px",
+            color: COLORS.WARM_WHITE,
+            fontSize: "12px",
+            cursor: "pointer",
+          }}
+        >
+          <RotateCw size={14} /> Rotate
+        </button>
+        <button
+          onClick={onDelete}
+          title="Delete part"
+          style={{
+            flex: 1,
+            display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+            backgroundColor: "transparent",
+            border: `1px solid ${COLORS.FAULT_RED}`,
+            borderRadius: "6px",
+            padding: "8px",
+            color: COLORS.FAULT_RED,
+            fontSize: "12px",
+            cursor: "pointer",
+          }}
+        >
+          <Trash2 size={14} /> Delete
+        </button>
       </div>
 
       <div style={{ flex: 1, overflowY: "auto" }}>
