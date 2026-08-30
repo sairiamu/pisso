@@ -114,52 +114,24 @@ function App() {
   }, []);
 
   const handleNewProject = async (name: string) => {
-    // 1. Immediately reset state and navigate to workspace
-    // This makes the UI responsive to the user's "Create" action
-    setView("workspace");
-    setMode("design");
-    setProjectPath(null);
-    setFiles([{ name: "sketch.ino", content: INITIAL_CODE }]);
-    setActiveFileIndex(0);
-    setIsProjectActive(true);
-
-    // Ensure canvas is cleared
-    setTimeout(() => {
-      canvasRef.current?.setDiagram({ version: 1, parts: [], connections: [] });
-    }, 50);
-
-    // 2. Open the folder picker to satisfy the "proper project directory" requirement
-    let defaultPath: string | undefined;
     try {
-      defaultPath = await invoke<string>("get_projects_path");
-    } catch (e) {
-      console.warn("Failed to get default projects path", e);
-    }
+      const newProjectPath = await invoke<string>("create_new_project", { name });
 
-    const selected = await open({
-      directory: true,
-      multiple: false,
-      defaultPath,
-      title: `Select Parent Folder for "${name}"`
-    });
+      setProjectPath(newProjectPath);
+      setFiles([{ name: "sketch.ino", content: INITIAL_CODE }]);
+      setActiveFileIndex(0);
+      setIsProjectActive(true);
+      setView("workspace");
+      setMode("design");
 
-    if (selected && typeof selected === 'string') {
-      try {
-        const newProjectPath = await join(selected, name);
-        setProjectPath(newProjectPath);
+      setTimeout(() => {
+        canvasRef.current?.setDiagram({ version: 1, parts: [], connections: [] });
+      }, 50);
 
-        setDebugStatus(`Project "${name}" initialized`);
-        setTimeout(() => setDebugStatus(""), 3000);
-      } catch (err) {
-        console.error("Failed to join paths", err);
-        const newProjectPath = `${selected}/${name}`;
-        setProjectPath(newProjectPath);
-      }
-    } else {
-      // User cancelled folder selection - they are still in Workspace
-      // but the project remains "Unsaved" (projectPath is null)
-      setDebugStatus("Project initialized (Unsaved)");
+      setDebugStatus(`Project "${name}" created`);
       setTimeout(() => setDebugStatus(""), 2000);
+    } catch (e) {
+      setError(`Failed to create project: ${e}`);
     }
   };
 

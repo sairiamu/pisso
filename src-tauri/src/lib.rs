@@ -223,6 +223,51 @@ fn get_recent_projects(app_handle: tauri::AppHandle) -> Result<Vec<String>, Stri
     Ok(alive)
 }
 
+fn sanitize_project_name(name: &str) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| if r#"\/:*?"<>|"#.contains(c) { '_' } else { c })
+        .collect();
+    let trimmed = cleaned.trim().trim_end_matches('.').to_string();
+    if trimmed.is_empty() { "Untitled Project".to_string() } else { trimmed }
+}
+
+#[tauri::command]
+fn create_new_project(app_handle: tauri::AppHandle, name: String) -> Result<String, String> {
+    let mut base = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    base.push("projects");
+    if !base.exists() {
+        fs::create_dir_all(&base).map_err(|e| e.to_string())?;
+    }
+
+    let safe_name = sanitize_project_name(&name);
+    let mut candidate = base.join(&safe_name);
+    let mut suffix = 2;
+    while candidate.exists() {
+        candidate = base.join(format!("{} ({})", safe_name, suffix));
+        suffix += 1;
+    }
+
+    fs::create_dir_all(candidate.join("design")).map_err(|e| e.to_string())?;
+    fs::create_dir_all(candidate.join("code")).map_err(|e| e.to_string())?;
+
+    fs::write(
+        candidate.join("design").join("diagram.json"),
+        r#"{"version":1,"parts":[],"connections":[]}"#,
+    ).map_err(|e| e.to_string())?;
+
+    let default_sketch = "#include <Arduino.h>\n\nvoid setup() {\n  pinMode(LED_BUILTIN, OUTPUT);\n}\n\nvoid loop() {\n  digitalWrite(LED_BUILTIN, HIGH);\n  delay(1000);\n  digitalWrite(LED_BUILTIN, LOW);\n  delay(1000);\n}\n";
+    fs::write(candidate.join("code").join("sketch.ino"), default_sketch)
+        .map_err(|e| e.to_string())?;
+
+    fs::write(
+        candidate.join("project.json"),
+        format!(r#"{{"activeFileIndex":0,"name":"{}"}}"#, safe_name.replace('"', "\\\"")),
+    ).map_err(|e| e.to_string())?;
+
+    Ok(clean_path(candidate).to_string_lossy().to_string())
+}
+
 #[tauri::command]
 fn list_projects(app_handle: tauri::AppHandle) -> Result<Vec<String>, String> {
     let app_data = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -822,6 +867,7 @@ pub fn run() {
             serial_port: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
+            create_new_project,
             list_projects,
             get_recent_projects,
             add_recent_project,
