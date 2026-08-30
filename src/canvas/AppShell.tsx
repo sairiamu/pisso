@@ -12,7 +12,9 @@ import { useSimulation } from "../simulator/SimulationContext";
 import { TerminalPanel } from "./TerminalPanel";
 import { GraphPanel } from "./GraphPanel";
 import { PortSelector } from "./PortSelector";
+import { BoardSelector } from "./BoardSelector";
 import { UploadButton } from "./UploadButton";
+import { BoardInfo } from "./CanvasShell";
 
 import { FileEntry } from "../App";
 
@@ -36,6 +38,10 @@ interface AppShellProps {
   isProjectActive?: boolean;
   files: FileEntry[];
   onCompileSuccess?: (hex: string) => void;
+  boards: BoardInfo[];
+  selectedBoardId: string | null;
+  onSelectBoard: (id: string | null) => void;
+  setDebugStatus?: (status: string) => void;
 }
 
 /**
@@ -58,6 +64,10 @@ export const AppShell: React.FC<AppShellProps> = ({
   isProjectActive,
   files,
   onCompileSuccess,
+  boards,
+  selectedBoardId,
+  onSelectBoard,
+  setDebugStatus,
 }) => {
   const [bottomPanel, setBottomPanel] = useState<'terminal' | 'graph' | null>(null);
   const [selectedPort, setSelectedPort] = useState<string | null>(null);
@@ -494,6 +504,12 @@ export const AppShell: React.FC<AppShellProps> = ({
                 {isSimulating ? "STOP SIM" : "SIMULATE"}
               </button>
 
+              <BoardSelector
+                boards={boards}
+                selectedBoardId={selectedBoardId}
+                onSelect={onSelectBoard}
+              />
+
               <PortSelector
                 projectPath={projectPath || null}
                 onPortSelect={setSelectedPort}
@@ -507,6 +523,9 @@ export const AppShell: React.FC<AppShellProps> = ({
                 onCompileSuccess={onCompileSuccess}
                 onOutput={appendBuildOutput}
                 onUploadSuccess={handleUploadSuccess}
+                boards={boards}
+                selectedBoardId={selectedBoardId}
+                setDebugStatus={setDebugStatus}
               />
 
               <button

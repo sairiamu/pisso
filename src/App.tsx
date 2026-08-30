@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { join } from "@tauri-apps/api/path";
-import { CanvasShell, CanvasShellHandle } from "./canvas/CanvasShell";
+import { CanvasShell, CanvasShellHandle, BoardInfo } from "./canvas/CanvasShell";
 import { AppShell, AppView } from "./canvas/AppShell";
 import { AppMode } from "./canvas/ModeSwitcher";
 import {
@@ -62,7 +62,19 @@ function App() {
   const [isNaming, setIsNaming] = useState(false);
   const [projectName, setProjectName] = useState("");
   const [isProjectActive, setIsProjectActive] = useState(false);
+  const [boards, setBoards] = useState<BoardInfo[]>([]);
+  const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
   const canvasRef = useRef<CanvasShellHandle>(null);
+
+  useEffect(() => {
+    if (boards.length > 0) {
+      if (!selectedBoardId || !boards.find(b => b.id === selectedBoardId)) {
+        setSelectedBoardId(boards[0].id);
+      }
+    } else {
+      setSelectedBoardId(null);
+    }
+  }, [boards, selectedBoardId]);
 
   const activeFile = files[activeFileIndex] || files[0];
 
@@ -295,6 +307,10 @@ function App() {
       isProjectActive={isProjectActive}
       files={files}
       onCompileSuccess={setLastHex}
+      boards={boards}
+      selectedBoardId={selectedBoardId}
+      onSelectBoard={setSelectedBoardId}
+      setDebugStatus={setDebugStatus}
     >
       {isNaming && (
         <div style={{
@@ -424,7 +440,7 @@ function App() {
         }}
       >
         <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
-          <CanvasShell ref={canvasRef} />
+          <CanvasShell ref={canvasRef} onBoardsChange={setBoards} />
           <ToolBox
             onAddPart={handleAddPart}
           />
@@ -451,6 +467,8 @@ function App() {
           onOutput={appendBuildOutput}
           onCompileSuccess={setLastHex}
           onProjectPathChange={setProjectPath}
+          boards={boards}
+          selectedBoardId={selectedBoardId}
         />
         <div style={{ flex: 1, minHeight: 0 }}>
           <CodeEditor value={activeFile.content} onChange={handleCodeChange} />

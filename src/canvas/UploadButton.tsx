@@ -5,6 +5,7 @@ import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
 import { writeSketch } from "../diagram/sketch";
 import { FileEntry } from "../App";
+import { BoardInfo } from "./CanvasShell";
 
 interface UploadButtonProps {
   projectPath: string | null;
@@ -14,6 +15,9 @@ interface UploadButtonProps {
   onCompileSuccess?: (hex: string) => void;
   onOutput?: (output: string | null) => void;
   onUploadSuccess?: () => void;
+  boards: BoardInfo[];
+  selectedBoardId: string | null;
+  setDebugStatus?: (status: string) => void;
 }
 
 export const UploadButton: React.FC<UploadButtonProps> = ({
@@ -24,6 +28,9 @@ export const UploadButton: React.FC<UploadButtonProps> = ({
   onCompileSuccess,
   onOutput,
   onUploadSuccess,
+  boards,
+  selectedBoardId,
+  setDebugStatus,
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -32,14 +39,31 @@ export const UploadButton: React.FC<UploadButtonProps> = ({
 
     if (isProcessing) return;
 
+    onOutput?.(null); // Clear previous output
+
+    if (boards.length === 0) {
+      onOutput?.("Error: No board found in your design. Add an Arduino board to the canvas before uploading.");
+      return;
+    }
+
+    if (!selectedBoardId) {
+      onOutput?.("Error: No board selected. Please pick a board from the dropdown in the top bar.");
+      return;
+    }
+
+    const board = boards.find(b => b.id === selectedBoardId);
+    if (!board) {
+      onOutput?.("Error: Selected board not found in design.");
+      return;
+    }
+
     if (!selectedPort) {
       onOutput?.("Error: No serial port selected. Please select a port from the dropdown menu in the top bar.");
       return;
     }
 
     setIsProcessing(true);
-    onOutput?.(null); // Clear previous output
-    onOutput?.(`Preparing upload to ${selectedPort}...`);
+    onOutput?.(`Preparing upload to ${board.label} on ${selectedPort}...`);
 
     try {
       let activePath = projectPath;
@@ -63,7 +87,7 @@ export const UploadButton: React.FC<UploadButtonProps> = ({
 
         const hexContent = await invoke<string>("compile_sketch", {
           sketchPath,
-          boardFqbn: "arduino:avr:uno",
+          boardFqbn: board.fqbn,
         });
 
         onOutput?.("Compilation successful.");
@@ -75,10 +99,14 @@ export const UploadButton: React.FC<UploadButtonProps> = ({
       await invoke("upload_hex", {
         hexPath: `${activePath}/sketch.hex`,
         port: selectedPort,
-        boardFqbn: "arduino:avr:uno",
+        boardFqbn: board.fqbn,
       });
 
       onOutput?.("UPLOAD SUCCESSFUL! Your board should be running the new code.");
+      if (setDebugStatus) {
+        setDebugStatus(`Upload complete — flashed to ${board.label}`);
+        setTimeout(() => setDebugStatus(""), 4000);
+      }
       onUploadSuccess?.();
     } catch (err) {
       onOutput?.(`UPLOAD FAILED: ${err}`);

@@ -17,4 +17,6 @@ export interface PartDefinition {
     pinValues?: Record<string, 'HIGH' | 'LOW' | 'FLOAT'>;
   }) => React.JSX.Element;
   defaultAttrs: Record<string, any>;
+  isBoard?: boolean;
+  fqbn?: string; // e.g. "arduino:avr:uno", required if isBoard is true
 }

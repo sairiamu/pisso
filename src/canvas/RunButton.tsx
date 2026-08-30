@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { COLORS } from "../CONSTANTS/colors";
 import { writeSketch } from "../diagram/sketch";
 import { FileEntry } from "../App";
+import { BoardInfo } from "./CanvasShell";
 
 interface RunButtonProps {
   projectPath: string | null;
@@ -10,6 +11,8 @@ interface RunButtonProps {
   onOutput?: (output: string | null) => void;
   onCompileSuccess?: (hex: string) => void;
   onProjectPathChange?: (path: string) => void;
+  boards: BoardInfo[];
+  selectedBoardId: string | null;
 }
 
 /**
@@ -22,6 +25,8 @@ export const RunButton: React.FC<RunButtonProps> = ({
   onOutput,
   onCompileSuccess,
   onProjectPathChange,
+  boards,
+  selectedBoardId,
 }) => {
   const [isCompiling, setIsCompiling] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -46,7 +51,33 @@ export const RunButton: React.FC<RunButtonProps> = ({
     setIsCompiling(true);
     setStatus("Compiling...");
     onOutput?.(null); // Clear previous output
-    onOutput?.("Compiling project...");
+
+    if (boards.length === 0) {
+      const errorMsg = "Error: No board found in your design. Add an Arduino board to the canvas before compiling.";
+      setStatus(errorMsg);
+      onOutput?.(errorMsg);
+      setIsCompiling(false);
+      return;
+    }
+
+    if (!selectedBoardId) {
+      const errorMsg = "Error: No board selected. Please pick a board from the dropdown in the top bar.";
+      setStatus(errorMsg);
+      onOutput?.(errorMsg);
+      setIsCompiling(false);
+      return;
+    }
+
+    const board = boards.find(b => b.id === selectedBoardId);
+    if (!board) {
+      const errorMsg = "Error: Selected board not found in design.";
+      setStatus(errorMsg);
+      onOutput?.(errorMsg);
+      setIsCompiling(false);
+      return;
+    }
+
+    onOutput?.(`Compiling project for ${board.label}...`);
 
     try {
       // 1. Save all project files
@@ -59,11 +90,11 @@ export const RunButton: React.FC<RunButtonProps> = ({
       // 2. Invoke the compile command
       // Find the main sketch file (sketch.ino)
       const mainSketch = files.find(f => f.name.endsWith(".ino")) || files[0];
-      const sketchPath = `${activePath}/code/${mainSketch.name}`;
+      const sketchPath = `${activePath}/${mainSketch.name}`;
 
       const hexContent = await invoke<string>("compile_sketch", {
         sketchPath,
-        boardFqbn: "arduino:avr:uno",
+        boardFqbn: board.fqbn,
       });
 
       const successMsg = "Successfully compiled sketch";

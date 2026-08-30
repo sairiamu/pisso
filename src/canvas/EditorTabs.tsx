@@ -5,6 +5,7 @@ import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
 import { RunButton } from "./RunButton";
 import { FileEntry } from "../App";
+import { BoardInfo } from "./CanvasShell";
 
 interface EditorTabsProps {
   projectPath: string | null;
@@ -17,6 +18,8 @@ interface EditorTabsProps {
   onOutput?: (output: string | null) => void;
   onCompileSuccess?: (hex: string) => void;
   onProjectPathChange?: (path: string) => void;
+  boards: BoardInfo[];
+  selectedBoardId: string | null;
 }
 
 /**
@@ -32,6 +35,8 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({
   onOutput,
   onCompileSuccess,
   onProjectPathChange,
+  boards,
+  selectedBoardId,
 }) => {
   return (
     <Panel
@@ -122,6 +127,8 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({
               onOutput={onOutput}
               onCompileSuccess={onCompileSuccess}
               onProjectPathChange={onProjectPathChange}
+              boards={boards}
+              selectedBoardId={selectedBoardId}
             />
           </div>
         </div>

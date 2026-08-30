@@ -41,6 +41,8 @@ export const ARDUINO_UNO_DEFINITION: PartDefinition = {
     { name: "A5", x: 255.5, y: 191.5 },
   ],
   defaultAttrs: {},
+  isBoard: true,
+  fqbn: "arduino:avr:uno",
   render: ({ attrs }) => {
     return (
       <div style={{ position: "relative", display: "inline-block" }}>

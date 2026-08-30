@@ -34,13 +34,25 @@ const edgeTypes = {
   wire: WireEdge,
 };
 
+export interface BoardInfo {
+  id: string;
+  type: string;
+  label: string;
+  fqbn: string;
+}
+
 export interface CanvasShellHandle {
   getDiagram: () => Diagram;
   setDiagram: (diagram: Diagram) => void;
   addPart: (type: string) => void;
+  getBoards: () => BoardInfo[];
 }
 
-const CanvasInternal = forwardRef<CanvasShellHandle>((_, ref) => {
+interface CanvasInternalProps {
+  onBoardsChange?: (boards: BoardInfo[]) => void;
+}
+
+const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onBoardsChange }, ref) => {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
@@ -137,6 +149,32 @@ const CanvasInternal = forwardRef<CanvasShellHandle>((_, ref) => {
         );
       },
       addPart: (type: string) => addPartInternal(type),
+      getBoards: () => {
+        return nodes
+          .map((n) => {
+            const type = (n.data as any).type;
+            const definition = PARTS_REGISTRY.get(type);
+            if (definition?.isBoard) {
+              return {
+                id: n.id,
+                type: type,
+                label: definition.label,
+                fqbn: definition.fqbn!,
+              };
+            }
+            // Fallback for hardcoded types if registry lookup fails to find isBoard
+            if (type === 'wokwi-arduino-uno' || type === 'arduino-uno') {
+              return {
+                id: n.id,
+                type: type,
+                label: definition?.label || 'Arduino Uno',
+                fqbn: definition?.fqbn || 'arduino:avr:uno',
+              };
+            }
+            return null;
+          })
+          .filter((b): b is BoardInfo => b !== null);
+      },
     }),
     [nodes, edges, setNodes, setEdges, addPartInternal]
   );
@@ -208,7 +246,7 @@ const CanvasInternal = forwardRef<CanvasShellHandle>((_, ref) => {
 
     // Update simulation pin mappings
     const mappings: Record<string, (string | number)[]> = {};
-    const unoPart = diagram.parts.find(p => p.type === 'arduino-uno');
+    const unoPart = diagram.parts.find(p => p.type === 'wokwi-arduino-uno' || p.type === 'arduino-uno');
     let rxTxConnected = false;
 
     if (unoPart) {
@@ -249,7 +287,33 @@ const CanvasInternal = forwardRef<CanvasShellHandle>((_, ref) => {
   // Debug: log nodes to console
   useEffect(() => {
     console.log("Current Canvas Nodes:", nodes);
-  }, [nodes]);
+    if (onBoardsChange) {
+      const boards = nodes
+        .map((n) => {
+          const type = (n.data as any).type;
+          const definition = PARTS_REGISTRY.get(type);
+          if (definition?.isBoard) {
+            return {
+              id: n.id,
+              type: type,
+              label: definition.label,
+              fqbn: definition.fqbn!,
+            };
+          }
+          if (type === 'wokwi-arduino-uno' || type === 'arduino-uno') {
+            return {
+              id: n.id,
+              type: type,
+              label: definition?.label || 'Arduino Uno',
+              fqbn: definition?.fqbn || 'arduino:avr:uno',
+            };
+          }
+          return null;
+        })
+        .filter((b): b is BoardInfo => b !== null);
+      onBoardsChange(boards);
+    }
+  }, [nodes, onBoardsChange]);
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -375,7 +439,9 @@ const CanvasInternal = forwardRef<CanvasShellHandle>((_, ref) => {
   );
 });
 
-export const CanvasShell = forwardRef<CanvasShellHandle>((props, ref) => (
+export interface CanvasShellProps extends CanvasInternalProps {}
+
+export const CanvasShell = forwardRef<CanvasShellHandle, CanvasShellProps>((props, ref) => (
   <ReactFlowProvider>
     <CanvasInternal {...props} ref={ref} />
   </ReactFlowProvider>
