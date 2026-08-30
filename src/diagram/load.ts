@@ -39,6 +39,9 @@ export function load(data: any): Diagram {
               y: Number(r.y) || 0,
             }))
           : [],
+        color: c.color,
+        thickness: typeof c.thickness === 'number' ? c.thickness : 3,
+        tracked: c.tracked === true,
       }))
     : [];
 

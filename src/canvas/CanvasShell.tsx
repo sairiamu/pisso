@@ -125,6 +125,9 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
           id: e.id,
           from: { partId: e.source, pin: e.sourceHandle || "" },
           to: { partId: e.target, pin: e.targetHandle || "" },
+          color: e.data?.color,
+          thickness: e.data?.thickness,
+          tracked: e.data?.tracked,
         })),
       }),
       setDiagram: (diagram: Diagram) => {
@@ -144,7 +147,12 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
             target: c.to.partId,
             targetHandle: c.to.pin,
             type: "wire",
-            data: { isShorted: false },
+            data: {
+              isShorted: false,
+              color: c.color,
+              thickness: typeof c.thickness === 'number' ? c.thickness : 3,
+              tracked: c.tracked === true
+            },
           }))
         );
       },
@@ -321,11 +329,20 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
         ...params,
         type: "wire",
         id: `w-${Date.now()}`,
-        data: { isShorted: false },
+        data: { isShorted: false, color: undefined, thickness: 3, tracked: false },
         source: params.source || "",
         target: params.target || "",
       } as Edge;
       setEdges((eds) => addEdge(newEdge, eds));
+    },
+    [setEdges]
+  );
+
+  const onUpdateEdgeStyle = useCallback(
+    (id: string, changes: Partial<{ color: string; thickness: number; tracked: boolean }>) => {
+      setEdges((eds) =>
+        eds.map((edge) => (edge.id === id ? { ...edge, data: { ...edge.data, ...changes } } : edge))
+      );
     },
     [setEdges]
   );
@@ -377,6 +394,7 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
   );
 
   const selectedNode = nodes.find((n) => n.selected);
+  const selectedEdge = edges.find((e) => e.selected) || null;
   const selectedPart = useMemo<PartInstance | null>(() => {
     if (!selectedNode || selectedNode.type !== "part") return null;
     return {
@@ -409,6 +427,38 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
         onDrop={onDrop}
         onDragOver={onDragOver}
       >
+        <style>
+          {`
+            @keyframes pissow-glow-pulse {
+              0% { opacity: 0.2; }
+              50% { opacity: 0.5; }
+              100% { opacity: 0.2; }
+            }
+            .pissow-wire-glow {
+              animation: pissow-glow-pulse 1.5s ease-in-out infinite;
+            }
+            .react-flow__edges, .react-flow__connectionline {
+              z-index: 1000 !important;
+              pointer-events: none !important;
+            }
+            .react-flow__edge {
+              pointer-events: visibleStroke !important;
+              cursor: pointer;
+            }
+            .nodrag {
+              cursor: default;
+            }
+            .nodrag wokwi-pushbutton,
+            .nodrag wokwi-slide-switch,
+            .nodrag wokwi-dip-switch,
+            .nodrag wokwi-tilt-switch,
+            .nodrag wokwi-potentiometer,
+            .nodrag wokwi-analog-joystick,
+            .nodrag wokwi-rotary-encoder {
+              cursor: pointer !important;
+            }
+          `}
+        </style>
         <ErrorBoundary name="Canvas">
           <ReactFlow
             nodes={nodes}
@@ -441,13 +491,23 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
           </ReactFlow>
         </ErrorBoundary>
       </div>
-      {selectedPart && (
+      {(selectedPart || selectedEdge) && (
         <div style={{ width: "260px", borderLeft: `1px solid ${COLORS.GRAPHITE_500}` }}>
           <InspectorPanel
             selectedPart={selectedPart}
+            selectedEdge={selectedEdge ? {
+              id: selectedEdge.id,
+              color: selectedEdge.data?.color as string | undefined,
+              thickness: selectedEdge.data?.thickness as number | undefined,
+              tracked: selectedEdge.data?.tracked as boolean | undefined,
+            } : null}
             onUpdateAttributes={onUpdateAttributes}
-            onRotate={() => onRotatePart(selectedPart.id)}
-            onDelete={() => onDeletePart(selectedPart.id)}
+            onUpdateEdgeStyle={onUpdateEdgeStyle}
+            onRotate={() => selectedPart && onRotatePart(selectedPart.id)}
+            onDelete={() => {
+              if (selectedPart) onDeletePart(selectedPart.id);
+              if (selectedEdge) setEdges((eds) => eds.filter((e) => e.id !== selectedEdge.id));
+            }}
           />
         </div>
       )}

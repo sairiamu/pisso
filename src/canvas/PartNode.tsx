@@ -16,10 +16,19 @@ const SafePartRender: React.FC<{
   definition: any;
   attrs: any;
   pinValues: any;
-}> = ({ definition, attrs, pinValues }) => {
+}> = React.memo(({ definition, attrs, pinValues }) => {
   try {
     return (
-      <div className="wokwi-container" style={{ display: "inline-block", margin: 0, padding: 0, lineHeight: 0 }}>
+      <div
+        className="wokwi-container"
+        style={{
+          display: "inline-block",
+          margin: 0,
+          padding: 0,
+          lineHeight: 0,
+          pointerEvents: "inherit"
+        }}
+      >
         {definition.render({ attrs, pinValues })}
       </div>
     );
@@ -30,7 +39,7 @@ const SafePartRender: React.FC<{
       </div>
     );
   }
-};
+});
 
 export const PartNode: React.FC<NodeProps> = React.memo((props) => {
   const { pinStates, pinMappings, isSimulating } = useSimulation();
@@ -123,6 +132,7 @@ export const PartNode: React.FC<NodeProps> = React.memo((props) => {
 
   const pins = useMemo(() => dynamicPins || [], [dynamicPins]);
 
+  const prevPinValuesRef = useRef<Record<string, string>>({});
   const pinValues = useMemo(() => {
     const values: Record<string, 'HIGH' | 'LOW' | 'FLOAT'> = {};
     if (isSimulating && pins.length > 0) {
@@ -139,6 +149,15 @@ export const PartNode: React.FC<NodeProps> = React.memo((props) => {
         }
       });
     }
+
+    // Deep compare to keep object reference stable if values haven't changed
+    const hasChanged = Object.keys(values).length !== Object.keys(prevPinValuesRef.current).length ||
+      Object.keys(values).some(k => values[k] !== prevPinValuesRef.current[k]);
+
+    if (!hasChanged) {
+      return prevPinValuesRef.current as Record<string, 'HIGH' | 'LOW' | 'FLOAT'>;
+    }
+    prevPinValuesRef.current = values;
     return values;
   }, [isSimulating, pins, pinMappings, pinStates, props.id]);
 
@@ -147,7 +166,7 @@ export const PartNode: React.FC<NodeProps> = React.memo((props) => {
   return (
     <ErrorBoundary name={`PartNode(${data.type})`}>
       <div
-        className="pissow-part-node"
+        className={`pissow-part-node ${isSimulating ? "nodrag" : ""}`}
         style={{
           position: "relative",
           transform: `rotate(${rotation}deg)`,
@@ -173,8 +192,24 @@ export const PartNode: React.FC<NodeProps> = React.memo((props) => {
             lineHeight: 0
           }}
         >
-          {/* Render the actual Wokwi element */}
-          <div style={{ pointerEvents: "none", display: "inline-block" }}>
+          {/* Render the actual Wokwi element.
+              pointerEvents are disabled in Design mode so clicking/dragging the
+              node isn't intercepted by the element's own internals (e.g. clicking
+              what will become a button shouldn't fight with node dragging).
+              During simulation, dragging is far less important than letting
+              interactive parts (pushbuttons, switches, joysticks, encoders...)
+              actually receive the clicks their own shadow DOM already knows how
+              to handle. `nodrag` tells React Flow not to start a node-drag from
+              clicks inside this wrapper, so pressing a button doesn't also move
+              the part around on the canvas. */}
+          <div
+            className={isSimulating ? "nodrag" : undefined}
+            style={{
+              pointerEvents: isSimulating ? "auto" : "none",
+              display: "inline-block",
+              userSelect: "none"
+            }}
+          >
             <SafePartRender
               definition={definition}
               attrs={data.attrs || {}}

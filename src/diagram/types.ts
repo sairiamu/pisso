@@ -17,6 +17,9 @@ export interface Connection {
   from: PinRef;
   to: PinRef;
   route?: { x: number; y: number }[];
+  color?: string;      // defaults to COLORS.TRACE_GREEN if unset
+  thickness?: number;  // stroke width in px, defaults to 3
+  tracked?: boolean;   // when true, wire glows/pulses
 }
 
 export interface Diagram {

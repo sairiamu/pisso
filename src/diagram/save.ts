@@ -20,6 +20,9 @@ export function save(diagram: Diagram): any {
       from: { ...c.from },
       to: { ...c.to },
       route: c.route ? c.route.map((r) => ({ ...r })) : [],
+      color: c.color,
+      thickness: c.thickness,
+      tracked: c.tracked,
     })),
   };
 }
