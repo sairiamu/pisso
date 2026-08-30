@@ -6,7 +6,7 @@ export const ARDUINO_UNO_DEFINITION: PartDefinition = {
   type: "wokwi-arduino-uno",
   label: "Arduino Uno",
   category: "Microcontrollers",
-  viewBox: { x: -4, y: 0, width: 72.58, height: 53.34 },
+  viewBox: { x: 0, y: 0, width: 274.35, height: 201.62 },
   pins: [
     { name: "A5.2", x: 87, y: 9 },
     { name: "A4.2", x: 97, y: 9 },

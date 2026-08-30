@@ -6,10 +6,10 @@ export const LED_DEFINITION: PartDefinition = {
   type: "wokwi-led",
   label: "LED",
   category: "Displays",
-  viewBox: { x: -10, y: -5, width: 35.456, height: 39.618 },
+  viewBox: { x: 0, y: 0, width: 134, height: 150 },
   pins: [
-    { name: "A", x: 25, y: 42 },
-    { name: "C", x: 15, y: 42 },
+    { name: "A", x: 132.3, y: 177.66 },
+    { name: "C", x: 94.5, y: 177.66 },
   ],
   defaultAttrs: { color: "red" },
   render: ({ attrs, pinValues }) => {

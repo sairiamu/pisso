@@ -6,6 +6,8 @@ import { COLORS } from "../CONSTANTS/colors";
 import { useSimulation } from "../simulator/SimulationContext";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 
+import { resolvePartPins } from "../utils/pin-resolver";
+
 export type PartNodeData = {
   type: string;
   attrs?: Record<string, any>;
@@ -68,25 +70,9 @@ export const PartNode: React.FC<NodeProps> = React.memo((props) => {
         return;
       }
 
-      const pinInfo = (element as any).pinInfo;
-      if (!pinInfo || !Array.isArray(pinInfo) || pinInfo.length === 0) {
-        if (retryCountRef.current < 50) {
-          retryCountRef.current++;
-          timerRef.current = setTimeout(updatePins, 100);
-        }
-        return;
-      }
-
-      // @wokwi/elements' pinInfo.x/y are already CSS pixels relative to the
-      // custom element's own natural (unscaled) top-left corner — NOT the
-      // same space as the element's internal mm-based SVG viewBox. Do not
-      // route these through the shadow-root SVG's CTM.
-      //
-      // offsetWidth/offsetHeight are layout measurements, unaffected by
-      // CSS transform (zoom/rotation), so they always match pinInfo's
-      // coordinate space.
       const naturalWidth = element.offsetWidth;
       const naturalHeight = element.offsetHeight;
+
       if (naturalWidth === 0 || naturalHeight === 0) {
         if (retryCountRef.current < 50) {
           retryCountRef.current++;
@@ -95,28 +81,17 @@ export const PartNode: React.FC<NodeProps> = React.memo((props) => {
         return;
       }
 
-      // The wokwi element sits at the wrapper's own top-left corner (no
-      // padding/margin on any element in between), so pinInfo coordinates
-      // map directly onto the wrapper's local space.
-      const seen = new Set<string>();
-      const uniquePins: { name: string; x: number; y: number }[] = [];
-
-      for (const p of pinInfo) {
-        if (p && typeof p.x === 'number' && typeof p.y === 'number' && p.name) {
-          if (!seen.has(p.name)) {
-            seen.add(p.name);
-            uniquePins.push({ name: p.name, x: p.x, y: p.y });
-          }
+      if (definition) {
+        const resolved = resolvePartPins(element, definition, naturalWidth, naturalHeight);
+        if (resolved.length > 0) {
+          setDynamicPins(resolved);
         }
-      }
-
-      if (uniquePins.length > 0) {
-        setDynamicPins(uniquePins);
       }
     } catch (err) {
       console.error(`PartNode: pin sync failed for ${data.type}`, err);
     }
   }, [definition, data.type]);
+
 
   useEffect(() => {
     retryCountRef.current = 0;

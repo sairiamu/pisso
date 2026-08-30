@@ -6,11 +6,11 @@ export const SERVO_DEFINITION: PartDefinition = {
   type: "wokwi-servo",
   label: "Servo Motor",
   category: "Actuators",
-  viewBox: { x: 0, y: 0, width: 45, height: 40 },
+  viewBox: { x: 0, y: 0, width: 170.1, height: 151.2 },
   pins: [
-    { name: "PWM", x: 10, y: 40 },
-    { name: "VCC", x: 15, y: 40 },
-    { name: "GND", x: 20, y: 40 },
+    { name: "PWM", x: 37.8, y: 151.2 },
+    { name: "VCC", x: 56.7, y: 151.2 },
+    { name: "GND", x: 75.6, y: 151.2 },
   ],
   defaultAttrs: {},
   render: ({ attrs }) => (

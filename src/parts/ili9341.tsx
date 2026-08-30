@@ -6,7 +6,7 @@ export const ILI9341_DEFINITION: PartDefinition = {
   type: "wokwi-ili9341",
   label: "ILI9341 TFT LCD",
   category: "Displays",
-  viewBox: { x: 0, y: 0, width: 46.5, height: 77.6 },
+  viewBox: { x: 0, y: 0, width: 175.77, height: 293.33 },
   pins: [
     { name: "VCC", x: 48.3, y: 287.2 },
     { name: "GND", x: 57.9, y: 287.2 },

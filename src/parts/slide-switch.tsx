@@ -6,11 +6,11 @@ export const SLIDE_SWITCH_DEFINITION: PartDefinition = {
   type: "wokwi-slide-switch",
   label: "Slide Switch",
   category: "Sensors",
-  viewBox: { x: 0, y: 0, width: 12, height: 6 },
+  viewBox: { x: 0, y: 0, width: 45.36, height: 22.68 },
   pins: [
-    { name: "1", x: 2, y: 6 },
-    { name: "2", x: 6, y: 6 },
-    { name: "3", x: 10, y: 6 },
+    { name: "1", x: 7.56, y: 22.68 },
+    { name: "2", x: 22.68, y: 22.68 },
+    { name: "3", x: 37.8, y: 22.68 },
   ],
   defaultAttrs: {},
   render: ({ attrs }) => (

@@ -6,7 +6,7 @@ export const PUSHBUTTON_DEFINITION: PartDefinition = {
   type: "wokwi-pushbutton",
   label: "Pushbutton",
   category: "Basic",
-  viewBox: { x: -3, y: 0, width: 18, height: 12 },
+  viewBox: { x: 0, y: 0, width: 68.04, height: 45.36 },
   pins: [
     { name: "1.l", x: 0, y: 13 },
     { name: "2.l", x: 0, y: 32 },
