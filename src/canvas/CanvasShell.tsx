@@ -25,10 +25,12 @@ import { PARTS_REGISTRY } from "../parts";
 import { useSimulation } from "../simulator/SimulationContext";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { RouteCacheProvider, useRouteCache } from "./RouteCache";
+import { WireActionsProvider } from "./WireActions";
 import "../parts"; // Ensure all parts are registered
 
 const nodeTypes = {
   part: PartNode,
+  board: PartNode,
 };
 
 const edgeTypes = {
@@ -63,6 +65,53 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const routeCache = useRouteCache();
 
+  const onAddWaypoint = useCallback(
+    (edgeId: string, point: { x: number; y: number }, insertAtIndex: number) => {
+      setEdges((eds) =>
+        eds.map((edge) => {
+          if (edge.id !== edgeId) return edge;
+          const current = (edge.data?.waypoints as { x: number; y: number }[]) || [];
+          const next = [...current];
+          next.splice(insertAtIndex, 0, point);
+          return { ...edge, data: { ...edge.data, waypoints: next } };
+        })
+      );
+    },
+    [setEdges]
+  );
+
+  const onMoveWaypoint = useCallback(
+    (edgeId: string, index: number, point: { x: number; y: number }) => {
+      setEdges((eds) =>
+        eds.map((edge) => {
+          if (edge.id !== edgeId) return edge;
+          const current = [...((edge.data?.waypoints as { x: number; y: number }[]) || [])];
+          current[index] = point;
+          return { ...edge, data: { ...edge.data, waypoints: current } };
+        })
+      );
+    },
+    [setEdges]
+  );
+
+  const onRemoveWaypoint = useCallback(
+    (edgeId: string, index: number) => {
+      setEdges((eds) =>
+        eds.map((edge) => {
+          if (edge.id !== edgeId) return edge;
+          const current = (edge.data?.waypoints as { x: number; y: number }[]) || [];
+          return { ...edge, data: { ...edge.data, waypoints: current.filter((_, i) => i !== index) } };
+        })
+      );
+    },
+    [setEdges]
+  );
+
+  const wireActions = useMemo(
+    () => ({ onAddWaypoint, onMoveWaypoint, onRemoveWaypoint }),
+    [onAddWaypoint, onMoveWaypoint, onRemoveWaypoint]
+  );
+
   const onPaneContextMenu = useCallback(
     (event: React.MouseEvent | MouseEvent) => {
       event.preventDefault();
@@ -87,7 +136,7 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
 
       const newNode: Node = {
         id,
-        type: "part",
+        type: definition.isBoard ? "board" : "part",
         position: { x: 0, y: 0 }, // Will be updated
         data: {
           type,
@@ -131,16 +180,20 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
           thickness: e.data?.thickness as number | undefined,
           tracked: e.data?.tracked as boolean | undefined,
           route: routeCache.get(e.id) || [],
+          waypoints: (e.data?.waypoints as { x: number; y: number }[]) || [],
         })),
       }),
       setDiagram: (diagram: Diagram) => {
         setNodes(
-          diagram.parts.map((p) => ({
-            id: p.id,
-            type: "part",
-            position: { x: p.x, y: p.y },
-            data: { type: p.type, attrs: p.attrs, rotation: p.rotation },
-          }))
+          diagram.parts.map((p) => {
+            const definition = PARTS_REGISTRY.get(p.type);
+            return {
+              id: p.id,
+              type: definition?.isBoard ? "board" : "part",
+              position: { x: p.x, y: p.y },
+              data: { type: p.type, attrs: p.attrs, rotation: p.rotation },
+            };
+          })
         );
         setEdges(
           diagram.connections.map((c) => ({
@@ -153,8 +206,9 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
             data: {
               isShorted: false,
               color: c.color,
-              thickness: typeof c.thickness === 'number' ? c.thickness : 3,
-              tracked: c.tracked === true
+              thickness: typeof c.thickness === "number" ? c.thickness : 3,
+              tracked: c.tracked === true,
+              waypoints: c.waypoints || [],
             },
           }))
         );
@@ -336,7 +390,13 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
         target: params.target || "",
         targetHandle: params.targetHandle,
         type: "wire",
-        data: { isShorted: false, color: undefined, thickness: 3, tracked: false },
+        data: {
+          isShorted: false,
+          color: undefined,
+          thickness: 3,
+          tracked: false,
+          waypoints: [],
+        },
       };
       setEdges((eds) => addEdge(newEdge, eds));
     },
@@ -416,16 +476,17 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
   const memoizedEdgeTypes = useMemo(() => edgeTypes, []);
 
   return (
-    <Panel
-      showScrews={true}
-      style={{
-        width: "100%",
-        height: "100%",
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "row",
-      }}
-    >
+    <WireActionsProvider actions={wireActions}>
+      <Panel
+        showScrews={true}
+        style={{
+          width: "100%",
+          height: "100%",
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "row",
+        }}
+      >
       <div
         ref={reactFlowWrapper}
         style={{ flex: 1, height: "100%", minHeight: "600px" }}
@@ -441,6 +502,15 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
             }
             .pissow-wire-glow {
               animation: pissow-glow-pulse 1.5s ease-in-out infinite;
+            }
+            .react-flow__node-part,
+            .react-flow__node-board {
+              background: transparent;
+              border: none;
+              border-radius: 0;
+              padding: 0;
+              width: auto;
+              box-shadow: none;
             }
             .react-flow__edges, .react-flow__connectionline {
               z-index: 1000;
@@ -529,6 +599,7 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
         />
       )}
     </Panel>
+    </WireActionsProvider>
   );
 });
 

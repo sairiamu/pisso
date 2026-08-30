@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
-import { join } from "@tauri-apps/api/path";
 import { CanvasShell, CanvasShellHandle, BoardInfo } from "./canvas/CanvasShell";
 import { AppShell, AppView } from "./canvas/AppShell";
 import { AppMode } from "./canvas/ModeSwitcher";

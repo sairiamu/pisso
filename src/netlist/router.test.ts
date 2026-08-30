@@ -69,6 +69,21 @@ function testRouter() {
     console.assert(result.found, "FAILED: Path should be found when start/end are on part edges");
   }
 
+  // Test 5: Exit direction hints
+  {
+    const start: Point = { x: 50, y: 50 };
+    const end: Point = { x: 150, y: 150 };
+    const obstacles: RouterObstacles = { parts: [], routedSegments: [] };
+    const result = routeOrthogonal(start, end, obstacles, 10, { startDirection: "right" });
+    console.assert(result.found, "FAILED: Path should be found with hints");
+    console.assert(result.points.length >= 2, "FAILED: Path should have at least 2 points");
+    // The first segment should be purely horizontal to the right
+    const p0 = result.points[0];
+    const p1 = result.points[1];
+    console.assert(p1.x > p0.x, "FAILED: First segment should move right (positive X)");
+    console.assert(p1.y === p0.y, "FAILED: First segment should be purely horizontal");
+  }
+
   console.log("All Router Tests Passed!");
 }
 

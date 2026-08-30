@@ -9,6 +9,13 @@ export interface Point {
   y: number;
 }
 
+export type Direction = "up" | "down" | "left" | "right";
+
+export interface RouteHints {
+  startDirection?: Direction;
+  endDirection?: Direction;
+}
+
 export interface RouterObstacles {
   parts: Rect[]; // bounding boxes of every part on canvas, with clearance already applied
   routedSegments: Point[][]; // each existing wire's waypoint path, as consecutive point pairs = segments
@@ -39,14 +46,48 @@ export function routeOrthogonal(
   start: Point,
   end: Point,
   obstacles: RouterObstacles,
-  gridSize: number = 10
+  gridSize: number = 10,
+  hints?: RouteHints
 ): RouteResult {
-  // 1. Build a grid covering the bounding box of start, end, and all obstacles.parts, expanded by a margin.
-  const margin = 2 * gridSize;
-  let minX = Math.min(start.x, end.x);
-  let minY = Math.min(start.y, end.y);
-  let maxX = Math.max(start.x, end.x);
-  let maxY = Math.max(start.y, end.y);
+  // 1. Handle stubs
+  const stubLen = 2; // grid cells
+  let actualStart = start;
+  let actualEnd = end;
+  const startPoints: Point[] = [start];
+  const endPoints: Point[] = [end];
+
+  if (hints?.startDirection) {
+    const dir = hints.startDirection;
+    const dx = dir === "left" ? -1 : dir === "right" ? 1 : 0;
+    const dy = dir === "up" ? -1 : dir === "down" ? 1 : 0;
+    for (let i = 1; i <= stubLen; i++) {
+      startPoints.push({
+        x: start.x + dx * i * gridSize,
+        y: start.y + dy * i * gridSize,
+      });
+    }
+    actualStart = startPoints[startPoints.length - 1];
+  }
+
+  if (hints?.endDirection) {
+    const dir = hints.endDirection;
+    const dx = dir === "left" ? -1 : dir === "right" ? 1 : 0;
+    const dy = dir === "up" ? -1 : dir === "down" ? 1 : 0;
+    for (let i = 1; i <= stubLen; i++) {
+      endPoints.unshift({
+        x: end.x + dx * i * gridSize,
+        y: end.y + dy * i * gridSize,
+      });
+    }
+    actualEnd = endPoints[0];
+  }
+
+  // 2. Build a grid covering the bounding box of start, end, and all obstacles.parts, expanded by a margin.
+  const margin = 2 * gridSize + (stubLen * gridSize);
+  let minX = Math.min(start.x, end.x, actualStart.x, actualEnd.x);
+  let minY = Math.min(start.y, end.y, actualStart.y, actualEnd.y);
+  let maxX = Math.max(start.x, end.x, actualStart.x, actualEnd.x);
+  let maxY = Math.max(start.y, end.y, actualStart.y, actualEnd.y);
 
   for (const rect of obstacles.parts) {
     minX = Math.min(minX, rect.x);
@@ -74,10 +115,10 @@ export function routeOrthogonal(
     row: Math.round((p.y - gridMinY) / gridSize),
   });
 
-  const startCoords = getGridCoords(start);
-  const endCoords = getGridCoords(end);
+  const startCoords = getGridCoords(actualStart);
+  const endCoords = getGridCoords(actualEnd);
 
-  // 2. A* Search
+  // 3. A* Search
   const openList: RouterNode[] = [];
   const closedSet = new Set<string>();
 
@@ -88,6 +129,14 @@ export function routeOrthogonal(
     h: manhattan(startCoords, endCoords),
     f: manhattan(startCoords, endCoords),
   };
+  // If start stub exists, set the initial direction to match the stub
+  if (hints?.startDirection) {
+    const dir = hints.startDirection;
+    startNode.dir = {
+      dCol: dir === "left" ? -1 : dir === "right" ? 1 : 0,
+      dRow: dir === "up" ? -1 : dir === "down" ? 1 : 0,
+    };
+  }
   openList.push(startNode);
 
   const nodeKey = (col: number, row: number) => `${col},${row}`;
@@ -119,7 +168,7 @@ export function routeOrthogonal(
     const px = gridMinX + col * gridSize;
     const py = gridMinY + row * gridSize;
 
-    // Start and end are always enterable
+    // actualStart and actualEnd are always enterable
     const isStart = col === startCoords.col && row === startCoords.row;
     const isEnd = col === endCoords.col && row === endCoords.row;
 
@@ -151,8 +200,15 @@ export function routeOrthogonal(
     const current = openList.shift()!;
 
     if (current.col === endCoords.col && current.row === endCoords.row) {
+      const mainPath = reconstructPath(current, gridMinX, gridMinY, gridSize, actualStart, actualEnd);
+      // Combine startPoints + mainPath (without actualStart) + endPoints (without actualEnd)
+      const combinedPoints = [
+        ...startPoints.slice(0, -1),
+        ...mainPath,
+        ...endPoints.slice(1)
+      ];
       return {
-        points: reconstructPath(current, gridMinX, gridMinY, gridSize, start, end),
+        points: simplifyPath(combinedPoints),
         found: true,
       };
     }
@@ -238,6 +294,10 @@ function reconstructPath(
     path[path.length - 1] = end;
   }
 
+  return path;
+}
+
+function simplifyPath(path: Point[]): Point[] {
   // Simplify path: merge collinear points
   if (path.length <= 2) return path;
 

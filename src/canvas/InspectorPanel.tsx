@@ -252,7 +252,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
           {label}
         </h3>
         <p style={{ fontSize: "0.75rem", color: COLORS.FOG, margin: "4px 0" }}>
-          ID: {selectedPart.id}
+          ID: {selectedPart?.id}
         </p>
       </div>
 
@@ -295,7 +295,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
 
       <div style={{ flex: 1, overflowY: "auto" }}>
         {attributes.map((attr) => {
-          const value = selectedPart.attrs[attr.key] ?? "";
+          const value = selectedPart?.attrs[attr.key] ?? "";
 
           return (
             <div key={attr.key} style={{ marginBottom: "16px" }}>

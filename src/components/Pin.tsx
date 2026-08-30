@@ -21,7 +21,7 @@ export const Pin: React.FC<PinProps> = ({ id, x, y, type = "source", _internal =
   return (
     <Handle
       id={id}
-      type="source"
+      type={type}
       position={Position.Top}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}

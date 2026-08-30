@@ -39,8 +39,14 @@ export function load(data: any): Diagram {
               y: Number(r.y) || 0,
             }))
           : [],
+        waypoints: Array.isArray(c.waypoints)
+          ? c.waypoints.map((w: any) => ({
+              x: Number(w.x) || 0,
+              y: Number(w.y) || 0,
+            }))
+          : [],
         color: c.color,
-        thickness: typeof c.thickness === 'number' ? c.thickness : 3,
+        thickness: typeof c.thickness === "number" ? c.thickness : 3,
         tracked: c.tracked === true,
       }))
     : [];

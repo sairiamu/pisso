@@ -178,18 +178,20 @@ export const PartNode: React.FC<NodeProps> = React.memo((props) => {
           position: "relative",
           transform: `rotate(${rotation}deg)`,
           transformOrigin: "center center",
-          padding: "20px",
-          backgroundColor: props.selected ? "rgba(201, 122, 75, 0.2)" : "rgba(30, 32, 38, 0.4)",
-          border: props.selected ? `2px solid ${COLORS.SOLDER_COPPER}` : `1px solid ${COLORS.GRAPHITE_500}`,
+          padding: props.selected ? "20px" : "0",
+          backgroundColor: props.selected ? "rgba(201, 122, 75, 0.2)" : "transparent",
+          border: props.selected ? `2px solid ${COLORS.SOLDER_COPPER}` : "none",
           borderRadius: "8px",
           display: "inline-block",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
+          boxShadow: props.selected ? "0 4px 12px rgba(0,0,0,0.5)" : "none",
           textAlign: "center"
         }}
       >
-        <div style={{ color: COLORS.WARM_WHITE, fontSize: "10px", marginBottom: "8px", opacity: 0.6, fontFamily: "monospace", pointerEvents: "none" }}>
-          {definition?.label}
-        </div>
+        {props.selected && (
+          <div style={{ color: COLORS.WARM_WHITE, fontSize: "10px", marginBottom: "8px", opacity: 0.6, fontFamily: "monospace", pointerEvents: "none" }}>
+            {definition?.label}
+          </div>
+        )}
 
         <div
           ref={wrapperRef}

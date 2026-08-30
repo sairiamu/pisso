@@ -16,7 +16,8 @@ export interface Connection {
   id: string;
   from: PinRef;
   to: PinRef;
-  route?: { x: number; y: number }[];
+  route?: { x: number; y: number }[];      // last-rendered full path (cache, unchanged)
+  waypoints?: { x: number; y: number }[];  // user-placed anchor points, source→target order
   color?: string;      // defaults to COLORS.TRACE_GREEN if unset
   thickness?: number;  // stroke width in px, defaults to 3
   tracked?: boolean;   // when true, wire glows/pulses

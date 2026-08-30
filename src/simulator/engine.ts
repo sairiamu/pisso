@@ -119,13 +119,9 @@ export class SimulationEngine {
     // 16MHz clock = 16000 cycles per millisecond
     const cyclesToRun = Math.floor(deltaMs * 16000);
 
-    // Timers are event-driven in this avr8js version: they register their
-    // own clock events with the CPU (in their constructors) and advance
-    // automatically as cpu.cycles increases inside avrInstruction(). There
-    // is no public .tick() to call manually — timer0/1/2 fields are kept
-    // only so this class can access their config for pin/PWM lookups.
     for (let i = 0; i < cyclesToRun; i++) {
       avrInstruction(this.cpu);
+      this.cpu.tick();
     }
 
     requestAnimationFrame(this.loop);

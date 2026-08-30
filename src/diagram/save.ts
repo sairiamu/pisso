@@ -20,6 +20,7 @@ export function save(diagram: Diagram): any {
       from: { ...c.from },
       to: { ...c.to },
       route: c.route ? c.route.map((r) => ({ ...r })) : [],
+      waypoints: c.waypoints ? c.waypoints.map((w) => ({ ...w })) : [],
       color: c.color,
       thickness: c.thickness,
       tracked: c.tracked,
