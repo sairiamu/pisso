@@ -101,6 +101,12 @@ function App() {
 
   useEffect(() => {
     const handleError = (event: ErrorEvent) => {
+      // Ignore ResizeObserver loop limit errors, which are generally harmless
+      // but triggered by components like CodeMirror or XYFlow during layout.
+      if (event.message === "ResizeObserver loop completed with undelivered notifications." ||
+          event.message === "ResizeObserver loop limit exceeded") {
+        return;
+      }
       setError(event.message);
     };
     window.addEventListener("error", handleError);

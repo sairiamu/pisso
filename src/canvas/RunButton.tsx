@@ -90,17 +90,24 @@ export const RunButton: React.FC<RunButtonProps> = ({
       // 2. Invoke the compile command
       // Find the main sketch file (sketch.ino)
       const mainSketch = files.find(f => f.name.endsWith(".ino")) || files[0];
-      const sketchPath = `${activePath}/${mainSketch.name}`;
+      // Note: save_project_files saves all files into a "code" subdirectory.
+      const sketchPath = `${activePath}/code/${mainSketch.name}`;
 
-      const hexContent = await invoke<string>("compile_sketch", {
+      interface CompileResult {
+        hex: string;
+        flash_used: number;
+        ram_used: number;
+      }
+
+      const result = await invoke<CompileResult>("compile_sketch", {
         sketchPath,
         boardFqbn: board.fqbn,
       });
 
-      const successMsg = "Successfully compiled sketch";
+      const successMsg = `Successfully compiled: Flash ${result.flash_used} bytes, RAM ${result.ram_used} bytes`;
       setStatus(successMsg);
       onOutput?.(successMsg);
-      onCompileSuccess?.(hexContent);
+      onCompileSuccess?.(result.hex);
       succeeded = true;
     } catch (err) {
       const errorMsg = String(err);

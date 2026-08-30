@@ -71,6 +71,11 @@ export const UploadButton: React.FC<UploadButtonProps> = ({
         activePath = await invoke<string>("get_playground_path");
       }
 
+      const mainSketch = files.find(f => f.name.endsWith(".ino")) || files[0];
+      const sketchPath = `${activePath}/code/${mainSketch.name}`;
+      // compile_sketch generates .hex in the same directory as the sketch by replacing the extension.
+      const hexPath = sketchPath.replace(/\.[^/.]+$/, "") + ".hex";
+
       // 1. Compile if needed
       if (!hasHex) {
         onOutput?.("No compiled hex found. Compiling project first...");
@@ -82,27 +87,31 @@ export const UploadButton: React.FC<UploadButtonProps> = ({
         }));
         await invoke("save_project_files", { projectPath: activePath, files: projectFiles });
 
-        const mainSketch = files.find(f => f.name.endsWith(".ino")) || files[0];
-        const sketchPath = `${activePath}/${mainSketch.name}`;
+        interface CompileResult {
+          hex: string;
+          flash_used: number;
+          ram_used: number;
+        }
 
-        const hexContent = await invoke<string>("compile_sketch", {
+        const result = await invoke<CompileResult>("compile_sketch", {
           sketchPath,
           boardFqbn: board.fqbn,
         });
 
-        onOutput?.("Compilation successful.");
-        onCompileSuccess?.(hexContent);
+        onOutput?.(`Compilation successful. (Flash: ${result.flash_used} bytes, RAM: ${result.ram_used} bytes)`);
+        onCompileSuccess?.(result.hex);
       }
 
       // 2. Upload
       onOutput?.(`Uploading to ${selectedPort}...`);
-      await invoke("upload_hex", {
-        hexPath: `${activePath}/sketch.hex`,
+      const uploadResult = await invoke<string>("upload_hex", {
+        hexPath,
         port: selectedPort,
         boardFqbn: board.fqbn,
       });
 
-      onOutput?.("UPLOAD SUCCESSFUL! Your board should be running the new code.");
+      onOutput?.(`VERIFICATION SUCCESS: ${uploadResult}`);
+      onOutput?.("Your board should be running the new code.");
       if (setDebugStatus) {
         setDebugStatus(`Upload complete — flashed to ${board.label}`);
         setTimeout(() => setDebugStatus(""), 4000);

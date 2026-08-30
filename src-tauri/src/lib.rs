@@ -372,12 +372,19 @@ fn load_diagram(project_path: String) -> Result<String, String> {
     }
 }
 
+#[derive(serde::Serialize)]
+pub struct CompileResult {
+    pub hex: String,
+    pub flash_used: u32,
+    pub ram_used: u32,
+}
+
 #[tauri::command]
 async fn compile_sketch(
     app_handle: tauri::AppHandle,
     sketch_path: String,
     board_fqbn: String,
-) -> Result<String, String> {
+) -> Result<CompileResult, String> {
     let config = get_board_config(&board_fqbn)?;
 
     let avr_toolchain = app_handle.path().resolve("resources/avr-toolchain", BaseDirectory::Resource)
@@ -410,6 +417,11 @@ async fn compile_sketch(
     let avr_objcopy = toolchain_bin.join("avr-objcopy.exe");
     #[cfg(not(windows))]
     let avr_objcopy = toolchain_bin.join("avr-objcopy");
+
+    #[cfg(windows)]
+    let avr_size = toolchain_bin.join("avr-size.exe");
+    #[cfg(not(windows))]
+    let avr_size = toolchain_bin.join("avr-size");
 
     // Check if toolchain exists
     if !avr_gcc.exists() {
@@ -616,8 +628,36 @@ async fn compile_sketch(
         return Err(String::from_utf8_lossy(&copy_output.stderr).to_string());
     }
 
+    // 4. Get memory usage info
+    let size_output = Command::new(&avr_size)
+        .arg(&output_elf)
+        .output()
+        .map_err(|e| format!("Failed to execute avr-size: {}", e))?;
+
+    let mut flash_used = 0;
+    let mut ram_used = 0;
+
+    if size_output.status.success() {
+        let out = String::from_utf8_lossy(&size_output.stdout);
+        let lines: Vec<&str> = out.lines().collect();
+        if lines.len() >= 2 {
+            let parts: Vec<&str> = lines[1].split_whitespace().collect();
+            if parts.len() >= 3 {
+                let text: u32 = parts[0].parse().unwrap_or(0);
+                let data: u32 = parts[1].parse().unwrap_or(0);
+                let bss: u32 = parts[2].parse().unwrap_or(0);
+                flash_used = text + data;
+                ram_used = data + bss;
+            }
+        }
+    }
+
     let hex_content = fs::read_to_string(&output_hex).map_err(|e| e.to_string())?;
-    Ok(hex_content)
+    Ok(CompileResult {
+        hex: hex_content,
+        flash_used,
+        ram_used,
+    })
 }
 
 #[tauri::command]
@@ -626,7 +666,7 @@ async fn upload_hex(
     hex_path: String,
     port: String,
     board_fqbn: String,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let config = get_board_config(&board_fqbn)?;
 
     let avr_toolchain = app_handle.path().resolve("resources/avr-toolchain", BaseDirectory::Resource)
@@ -707,7 +747,7 @@ async fn upload_hex(
 
     let status = child.wait().map_err(|e| format!("avrdude execution failed: {}", e))?;
     if status.success() {
-        Ok(())
+        Ok("avrdude: flash verified and upload successful".into())
     } else {
         Err("avrdude exited with error. Check the progress logs for details.".into())
     }

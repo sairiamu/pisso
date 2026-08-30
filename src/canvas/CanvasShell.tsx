@@ -163,7 +163,7 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
               };
             }
             // Fallback for hardcoded types if registry lookup fails to find isBoard
-            if (type === 'wokwi-arduino-uno' || type === 'arduino-uno') {
+            if (type === 'wokwi-arduino-uno') {
               return {
                 id: n.id,
                 type: type,
@@ -246,7 +246,7 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
 
     // Update simulation pin mappings
     const mappings: Record<string, (string | number)[]> = {};
-    const unoPart = diagram.parts.find(p => p.type === 'wokwi-arduino-uno' || p.type === 'arduino-uno');
+    const unoPart = diagram.parts.find(p => p.type === 'wokwi-arduino-uno');
     let rxTxConnected = false;
 
     if (unoPart) {
@@ -300,7 +300,7 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
               fqbn: definition.fqbn!,
             };
           }
-          if (type === 'wokwi-arduino-uno' || type === 'arduino-uno') {
+          if (type === 'wokwi-arduino-uno') {
             return {
               id: n.id,
               type: type,
