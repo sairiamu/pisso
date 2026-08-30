@@ -24,6 +24,7 @@ import { resolveNode, Diagram, PartInstance } from "../diagram";
 import { PARTS_REGISTRY } from "../parts";
 import { useSimulation } from "../simulator/SimulationContext";
 import { ErrorBoundary } from "../components/ErrorBoundary";
+import { RouteCacheProvider, useRouteCache } from "./RouteCache";
 import "../parts"; // Ensure all parts are registered
 
 const nodeTypes = {
@@ -60,6 +61,7 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
   const [lastError, setLastError] = useState<string | null>(null);
   const { setPinMappings, setSerialConnected } = useSimulation();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const routeCache = useRouteCache();
 
   const onPaneContextMenu = useCallback(
     (event: React.MouseEvent | MouseEvent) => {
@@ -125,9 +127,10 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
           id: e.id,
           from: { partId: e.source, pin: e.sourceHandle || "" },
           to: { partId: e.target, pin: e.targetHandle || "" },
-          color: e.data?.color,
-          thickness: e.data?.thickness,
-          tracked: e.data?.tracked,
+          color: e.data?.color as string | undefined,
+          thickness: e.data?.thickness as number | undefined,
+          tracked: e.data?.tracked as boolean | undefined,
+          route: routeCache.get(e.id) || [],
         })),
       }),
       setDiagram: (diagram: Diagram) => {
@@ -325,14 +328,16 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
 
   const onConnect = useCallback(
     (params: Connection) => {
+      console.log("Connecting:", params);
       const newEdge: Edge = {
-        ...params,
-        type: "wire",
-        id: `w-${Date.now()}`,
-        data: { isShorted: false, color: undefined, thickness: 3, tracked: false },
+        id: `w-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         source: params.source || "",
+        sourceHandle: params.sourceHandle,
         target: params.target || "",
-      } as Edge;
+        targetHandle: params.targetHandle,
+        type: "wire",
+        data: { isShorted: false, color: undefined, thickness: 3, tracked: false },
+      };
       setEdges((eds) => addEdge(newEdge, eds));
     },
     [setEdges]
@@ -438,11 +443,11 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
               animation: pissow-glow-pulse 1.5s ease-in-out infinite;
             }
             .react-flow__edges, .react-flow__connectionline {
-              z-index: 1000 !important;
-              pointer-events: none !important;
+              z-index: 1000;
+              pointer-events: none;
             }
             .react-flow__edge {
-              pointer-events: visibleStroke !important;
+              pointer-events: visibleStroke;
               cursor: pointer;
             }
             .nodrag {
@@ -531,6 +536,8 @@ export interface CanvasShellProps extends CanvasInternalProps {}
 
 export const CanvasShell = forwardRef<CanvasShellHandle, CanvasShellProps>((props, ref) => (
   <ReactFlowProvider>
-    <CanvasInternal {...props} ref={ref} />
+    <RouteCacheProvider>
+      <CanvasInternal {...props} ref={ref} />
+    </RouteCacheProvider>
   </ReactFlowProvider>
 ));

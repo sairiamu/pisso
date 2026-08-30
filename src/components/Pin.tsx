@@ -21,7 +21,7 @@ export const Pin: React.FC<PinProps> = ({ id, x, y, type = "source", _internal =
   return (
     <Handle
       id={id}
-      type={type}
+      type="source"
       position={Position.Top}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -32,16 +32,17 @@ export const Pin: React.FC<PinProps> = ({ id, x, y, type = "source", _internal =
         width: PINS.SIZE,
         height: PINS.SIZE,
         backgroundColor: isHovered ? PINS.HOVER_COLOR : PINS.COLOR,
-        border: "1px solid rgba(0,0,0,0.3)",
+        border: "1px solid rgba(0,0,0,0.5)",
         borderRadius: "50%",
-        transform: "translate(-50%, -50%)", // Center the handle on the coordinate
+        transform: "translate(-50%, -50%)",
         transition: "background-color 0.15s ease",
-        zIndex: 1000,
+        zIndex: 2000,
         minWidth: 0,
         minHeight: 0,
         cursor: "crosshair",
         pointerEvents: "auto",
-        boxShadow: isHovered ? `0 0 8px ${PINS.HOVER_COLOR}` : "none"
+        boxShadow: isHovered ? `0 0 6px ${PINS.HOVER_COLOR}` : "none",
+        opacity: isHovered ? 1 : 0.8
       }}
     />
   );

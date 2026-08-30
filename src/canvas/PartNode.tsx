@@ -98,13 +98,20 @@ export const PartNode: React.FC<NodeProps> = React.memo((props) => {
       // The wokwi element sits at the wrapper's own top-left corner (no
       // padding/margin on any element in between), so pinInfo coordinates
       // map directly onto the wrapper's local space.
-      const newPins = pinInfo
-        .filter((p: any) => p && typeof p.x === 'number' && typeof p.y === 'number' && p.name)
-        .map((p: any) => ({ name: p.name, x: p.x, y: p.y })) as
-        { name: string; x: number; y: number }[];
+      const seen = new Set<string>();
+      const uniquePins: { name: string; x: number; y: number }[] = [];
 
-      if (newPins.length > 0) {
-        setDynamicPins(newPins);
+      for (const p of pinInfo) {
+        if (p && typeof p.x === 'number' && typeof p.y === 'number' && p.name) {
+          if (!seen.has(p.name)) {
+            seen.add(p.name);
+            uniquePins.push({ name: p.name, x: p.x, y: p.y });
+          }
+        }
+      }
+
+      if (uniquePins.length > 0) {
+        setDynamicPins(uniquePins);
       }
     } catch (err) {
       console.error(`PartNode: pin sync failed for ${data.type}`, err);
