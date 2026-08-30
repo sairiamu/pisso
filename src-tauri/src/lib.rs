@@ -14,8 +14,8 @@ pub struct AppState {
 /// provided by Rust's canonicalize() or Tauri's path resolvers.
 fn clean_path<P: AsRef<Path>>(path: P) -> PathBuf {
     let path_str = path.as_ref().to_string_lossy();
-    if path_str.starts_with(r"\\?\") {
-        PathBuf::from(&path_str[4..])
+    if let Some(stripped) = path_str.strip_prefix(r"\\?\") {
+        PathBuf::from(stripped)
     } else {
         path.as_ref().to_path_buf()
     }
@@ -101,8 +101,9 @@ fn save_full_project(
     diagram_json: String,
     files: Vec<ProjectFile>,
 ) -> Result<(), String> {
+    let project_path = clean_path(project_path);
     // 1. Save Design
-    let mut design_path = PathBuf::from(&project_path);
+    let mut design_path = project_path.clone();
     design_path.push("design");
     if !design_path.exists() {
         fs::create_dir_all(&design_path).map_err(|e| e.to_string())?;
@@ -111,7 +112,7 @@ fn save_full_project(
     fs::write(design_path, diagram_json).map_err(|e| e.to_string())?;
 
     // 2. Save Code
-    let mut code_path = PathBuf::from(&project_path);
+    let mut code_path = project_path.clone();
     code_path.push("code");
     if !code_path.exists() {
         fs::create_dir_all(&code_path).map_err(|e| e.to_string())?;
@@ -127,7 +128,7 @@ fn save_full_project(
 
 #[tauri::command]
 fn save_diagram(project_path: String, diagram_json: String) -> Result<(), String> {
-    let mut path = PathBuf::from(project_path);
+    let mut path = clean_path(project_path);
     path.push("design");
     if !path.exists() {
         fs::create_dir_all(&path).map_err(|e| e.to_string())?;
@@ -150,6 +151,76 @@ fn get_projects_path(app_handle: tauri::AppHandle) -> Result<String, String> {
     }
 
     Ok(clean_path(path).to_string_lossy().to_string())
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct RecentProject {
+    path: String,
+    last_opened: u64, // unix timestamp, seconds
+}
+
+fn recent_projects_file(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let mut path = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+    if !path.exists() {
+        fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+    }
+    path.push("recent_projects.json");
+    Ok(path)
+}
+
+#[tauri::command]
+fn add_recent_project(app_handle: tauri::AppHandle, project_path: String) -> Result<(), String> {
+    let project_path = clean_path(project_path).to_string_lossy().to_string();
+    let file = recent_projects_file(&app_handle)?;
+
+    let mut entries: Vec<RecentProject> = if file.exists() {
+        let raw = fs::read_to_string(&file).map_err(|e| e.to_string())?;
+        serde_json::from_str(&raw).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    // Remove any existing entry for this path (case: re-saving/re-opening),
+    // then push it to the front as the most recent.
+    entries.retain(|e| e.path != project_path);
+    entries.insert(0, RecentProject { path: project_path, last_opened: now });
+
+    // Cap at 20 entries so this file never grows unbounded.
+    entries.truncate(20);
+
+    let json = serde_json::to_string_pretty(&entries).map_err(|e| e.to_string())?;
+    fs::write(file, json).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_recent_projects(app_handle: tauri::AppHandle) -> Result<Vec<String>, String> {
+    let file = recent_projects_file(&app_handle)?;
+    if !file.exists() {
+        return Ok(Vec::new());
+    }
+
+    let raw = fs::read_to_string(&file).map_err(|e| e.to_string())?;
+    let entries: Vec<RecentProject> = serde_json::from_str(&raw).unwrap_or_default();
+
+    // Prune entries whose folder no longer exists on disk (moved/deleted
+    // project), and don't rewrite the file just for a read — pruning here
+    // is display-only. The next add_recent_project call will naturally
+    // clean the file since it starts from the currently-read list too.
+    let alive: Vec<String> = entries
+        .into_iter()
+        .filter(|e| Path::new(&e.path).exists())
+        .map(|e| e.path)
+        .collect();
+
+    Ok(alive)
 }
 
 #[tauri::command]
@@ -216,7 +287,7 @@ struct ProjectFile {
 
 #[tauri::command]
 fn save_project_files(project_path: String, files: Vec<ProjectFile>) -> Result<(), String> {
-    let mut path = PathBuf::from(project_path);
+    let mut path = clean_path(project_path);
     path.push("code");
     if !path.exists() {
         fs::create_dir_all(&path).map_err(|e| e.to_string())?;
@@ -231,13 +302,14 @@ fn save_project_files(project_path: String, files: Vec<ProjectFile>) -> Result<(
 
 #[tauri::command]
 fn load_project_files(project_path: String) -> Result<Vec<ProjectFile>, String> {
-    let mut path = PathBuf::from(&project_path);
+    let project_path = clean_path(project_path);
+    let mut path = project_path.clone();
     path.push("code");
 
     let load_from = if path.exists() {
         path
     } else {
-        PathBuf::from(&project_path)
+        project_path
     };
 
     let entries = fs::read_dir(load_from).map_err(|e| e.to_string())?;
@@ -262,7 +334,7 @@ fn load_project_files(project_path: String) -> Result<Vec<ProjectFile>, String> 
 
 #[tauri::command]
 fn save_project_metadata(project_path: String, metadata_json: String) -> Result<(), String> {
-    let mut path = PathBuf::from(project_path);
+    let mut path = clean_path(project_path);
     if !path.exists() {
         fs::create_dir_all(&path).map_err(|e| e.to_string())?;
     }
@@ -273,7 +345,7 @@ fn save_project_metadata(project_path: String, metadata_json: String) -> Result<
 
 #[tauri::command]
 fn load_project_metadata(project_path: String) -> Result<String, String> {
-    let mut path = PathBuf::from(project_path);
+    let mut path = clean_path(project_path);
     path.push("project.json");
 
     if !path.exists() {
@@ -285,7 +357,8 @@ fn load_project_metadata(project_path: String) -> Result<String, String> {
 
 #[tauri::command]
 fn load_diagram(project_path: String) -> Result<String, String> {
-    let mut path = PathBuf::from(&project_path);
+    let project_path = clean_path(project_path);
+    let mut path = project_path.clone();
     path.push("design");
     path.push("diagram.json");
 
@@ -293,7 +366,7 @@ fn load_diagram(project_path: String) -> Result<String, String> {
         fs::read_to_string(path).map_err(|e| e.to_string())
     } else {
         // Fallback to root for existing projects
-        let mut old_path = PathBuf::from(project_path);
+        let mut old_path = project_path;
         old_path.push("diagram.json");
         fs::read_to_string(old_path).map_err(|e| e.to_string())
     }
@@ -710,6 +783,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             list_projects,
+            get_recent_projects,
+            add_recent_project,
             get_projects_path,
             save_full_project,
             save_diagram,

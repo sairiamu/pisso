@@ -119,15 +119,26 @@ export class SimulationEngine {
     // 16MHz clock = 16000 cycles per millisecond
     const cyclesToRun = Math.floor(deltaMs * 16000);
 
+    // Timers are event-driven in this avr8js version: they register their
+    // own clock events with the CPU (in their constructors) and advance
+    // automatically as cpu.cycles increases inside avrInstruction(). There
+    // is no public .tick() to call manually — timer0/1/2 fields are kept
+    // only so this class can access their config for pin/PWM lookups.
     for (let i = 0; i < cyclesToRun; i++) {
       avrInstruction(this.cpu);
-      this.timer0.tick();
-      this.timer1.tick();
-      this.timer2.tick();
     }
 
     requestAnimationFrame(this.loop);
   };
+
+  /**
+   * Exposes a timer instance (0, 1, or 2) so callers (e.g. PWM/servo
+   * pulse-width readers used by simulated environment inputs) can read its
+   * compare registers without the engine needing to know about them.
+   */
+  public getTimer(index: 0 | 1 | 2): AVRTimer {
+    return [this.timer0, this.timer1, this.timer2][index];
+  }
 
   /**
    * Returns the current state of a specific Arduino pin.

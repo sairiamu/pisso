@@ -21,6 +21,7 @@ export const RunButton: React.FC<RunButtonProps> = ({
   files,
   onOutput,
   onCompileSuccess,
+  onProjectPathChange,
 }) => {
   const [isCompiling, setIsCompiling] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -33,6 +34,9 @@ export const RunButton: React.FC<RunButtonProps> = ({
       try {
         // Automatically use a playground directory if no project is open
         activePath = await invoke<string>("get_playground_path");
+        if (activePath && onProjectPathChange) {
+          onProjectPathChange(activePath);
+        }
       } catch (err) {
         onOutput?.(`System Error: Failed to initialize playground. ${err}`);
         return;

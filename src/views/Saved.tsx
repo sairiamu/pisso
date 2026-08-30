@@ -3,6 +3,7 @@ import { FolderOpen, CircuitBoard } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
+import { getRecentProjects } from "../diagram";
 
 interface SavedViewProps {
   onOpenProject: (path?: string) => void;
@@ -15,8 +16,12 @@ export const SavedView: React.FC<SavedViewProps> = ({ onOpenProject }) => {
   useEffect(() => {
     const fetchProjects = async () => {
       try {
-        const list = await invoke<string[]>("list_projects");
-        setProjects(list);
+        const [recent, scanned] = await Promise.all([
+          getRecentProjects().catch(() => []),
+          invoke<string[]>("list_projects").catch(() => []),
+        ]);
+        const merged = Array.from(new Set([...recent, ...scanned]));
+        setProjects(merged);
       } catch (err) {
         console.error("Failed to list projects:", err);
       } finally {

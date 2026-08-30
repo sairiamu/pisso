@@ -1,16 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
+import { join } from "@tauri-apps/api/path";
 import { CanvasShell, CanvasShellHandle } from "./canvas/CanvasShell";
 import { AppShell, AppView } from "./canvas/AppShell";
 import { AppMode } from "./canvas/ModeSwitcher";
 import {
-  saveProject,
   loadProject,
-  saveProjectFiles,
   loadProjectFiles,
   saveProjectMetadata,
   loadProjectMetadata,
-  saveFullProject
+  saveFullProject,
+  addRecentProject
 } from "./diagram";
 import { ToolBox } from "./canvas/ToolBox";
 import { CodeEditor } from "./components/CodeEditor";
@@ -125,11 +126,17 @@ function App() {
     });
 
     if (selected && typeof selected === 'string') {
-      const newProjectPath = `${selected}/${name}`;
-      setProjectPath(newProjectPath);
+      try {
+        const newProjectPath = await join(selected, name);
+        setProjectPath(newProjectPath);
 
-      setDebugStatus(`Project "${name}" initialized at ${newProjectPath}`);
-      setTimeout(() => setDebugStatus(""), 3000);
+        setDebugStatus(`Project "${name}" initialized`);
+        setTimeout(() => setDebugStatus(""), 3000);
+      } catch (err) {
+        console.error("Failed to join paths", err);
+        const newProjectPath = `${selected}/${name}`;
+        setProjectPath(newProjectPath);
+      }
     } else {
       // User cancelled folder selection - they are still in Workspace
       // but the project remains "Unsaved" (projectPath is null)
@@ -152,9 +159,15 @@ function App() {
     let currentPath = projectPath;
 
     if (!currentPath) {
+      let defaultPath: string | undefined;
+      try {
+        defaultPath = await invoke<string>("get_projects_path");
+      } catch (e) {}
+
       const selected = await open({
         directory: true,
         multiple: false,
+        defaultPath,
         title: "Select Folder to Save Project"
       });
       if (selected && typeof selected === 'string') {
@@ -171,6 +184,8 @@ function App() {
 
       // Save everything (Design + Code) in one atomic-like operation
       await saveFullProject(currentPath, diagram, files);
+
+      await addRecentProject(currentPath);
 
       // Save metadata separately as it's not core project data
       await saveProjectMetadata(currentPath, { activeFileIndex });
@@ -189,9 +204,15 @@ function App() {
     if (path) {
       selected = path;
     } else {
+      let defaultPath: string | undefined;
+      try {
+        defaultPath = await invoke<string>("get_projects_path");
+      } catch (e) {}
+
       const result = await open({
         directory: true,
         multiple: false,
+        defaultPath,
         title: "Open Project Folder"
       });
       if (result && typeof result === 'string') {
@@ -206,6 +227,7 @@ function App() {
         const metadata = await loadProjectMetadata(selected);
 
         setProjectPath(selected);
+        await addRecentProject(selected);
         canvasRef.current?.setDiagram(diagram);
 
         if (projectFiles.length > 0) {

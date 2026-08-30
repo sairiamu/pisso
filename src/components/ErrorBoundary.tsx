@@ -1,5 +1,4 @@
-import React, { Component, ErrorInfo, ReactNode } from "react";
-import { COLORS } from "../CONSTANTS/colors";
+import { Component, ErrorInfo, ReactNode } from "react";
 
 interface Props {
   children: ReactNode;
@@ -45,7 +44,7 @@ export class ErrorBoundary extends Component<Props, State> {
           }}
         >
           <strong>Component Render Error</strong>
-          {process.env.NODE_ENV === 'development' && (
+          {import.meta.env.DEV && (
             <div style={{ marginTop: "4px", opacity: 0.8, fontSize: "10px" }}>
               {this.state.error?.message}
             </div>

@@ -49,7 +49,6 @@ export const AppShell: React.FC<AppShellProps> = ({
   mode,
   onModeChange,
   onNewProject,
-  onOpenProject,
   onSaveProject,
   saveDisabled,
   lastHex,

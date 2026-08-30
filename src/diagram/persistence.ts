@@ -9,6 +9,27 @@ export interface ProjectFile {
 }
 
 /**
+ * Records a project path as recently used (called after a successful
+ * save or open). Safe to call even if it fails — recency tracking should
+ * never block the user's actual save/open action.
+ */
+export async function addRecentProject(projectPath: string): Promise<void> {
+  try {
+    await invoke("add_recent_project", { projectPath });
+  } catch (err) {
+    console.warn("Failed to record recent project:", err);
+  }
+}
+
+/**
+ * Returns recently opened/saved project paths, most recent first, with
+ * any paths that no longer exist on disk already filtered out.
+ */
+export async function getRecentProjects(): Promise<string[]> {
+  return await invoke<string[]>("get_recent_projects");
+}
+
+/**
  * Saves the entire project (diagram and code files) in a single operation.
  */
 export async function saveFullProject(

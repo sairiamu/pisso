@@ -16,8 +16,7 @@ const SafePartRender: React.FC<{
   definition: any;
   attrs: any;
   pinValues: any;
-  nodeId: string;
-}> = ({ definition, attrs, pinValues, nodeId }) => {
+}> = ({ definition, attrs, pinValues }) => {
   try {
     return (
       <div className="wokwi-container" style={{ display: "inline-block", margin: 0, padding: 0, lineHeight: 0 }}>
@@ -180,7 +179,6 @@ export const PartNode: React.FC<NodeProps> = React.memo((props) => {
               definition={definition}
               attrs={data.attrs || {}}
               pinValues={pinValues}
-              nodeId={props.id}
             />
           </div>
 

@@ -1,11 +1,12 @@
-import React, { useState } from "react";
-import { Plus, FolderOpen, Clock, Folder, ChevronDown, X } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Plus, FolderOpen, Clock, Folder, ChevronDown, CircuitBoard } from "lucide-react";
 import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
+import { getRecentProjects } from "../diagram";
 
 interface DashboardProps {
   onNewProject: () => void;
-  onOpenProject: () => void;
+  onOpenProject: (path?: string) => void;
   onSaveProject?: () => void;
   onCloseProject?: () => void;
   onSelectView?: (view: any) => void;
@@ -23,6 +24,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
   projectPath
 }) => {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [recentProjects, setRecentProjects] = useState<string[]>([]);
+
+  useEffect(() => {
+    getRecentProjects().then(setRecentProjects).catch(() => setRecentProjects([]));
+  }, []);
+
+  const getProjectName = (path: string) => {
+    const parts = path.split(/[\\/]/);
+    return parts[parts.length - 1] || path;
+  };
 
   const menuStyle: React.CSSProperties = {
     position: "relative",
@@ -96,7 +107,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           {activeMenu === 'file' && (
             <div style={dropdownStyle}>
               <div style={menuItemStyle()} onClick={onNewProject}>New Project</div>
-              <div style={menuItemStyle()} onClick={onOpenProject}>Open Project</div>
+              <div style={menuItemStyle()} onClick={() => onOpenProject()}>Open Project</div>
               <div
                 style={menuItemStyle()}
                 onClick={() => onSaveProject?.()}
@@ -205,7 +216,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
            </button>
 
            <button
-             onClick={onOpenProject}
+             onClick={() => onOpenProject()}
              style={{
                flex: 1,
                backgroundColor: COLORS.GRAPHITE_700,
@@ -242,17 +253,72 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <Clock size={20} color={COLORS.FOG} />
             <h2 style={{ fontSize: "20px", fontWeight: 600, margin: 0 }}>Recent Projects</h2>
           </div>
-          <div style={{
-            color: COLORS.FOG,
-            fontSize: "14px",
-            padding: "32px",
-            backgroundColor: COLORS.GRAPHITE_900,
-            borderRadius: "12px",
-            border: `1px dashed ${COLORS.GRAPHITE_500}`,
-            textAlign: "center"
-          }}>
-            No recent projects found.
-          </div>
+          {recentProjects.length === 0 ? (
+            <div style={{
+              color: COLORS.FOG,
+              fontSize: "14px",
+              padding: "32px",
+              backgroundColor: COLORS.GRAPHITE_900,
+              borderRadius: "12px",
+              border: `1px dashed ${COLORS.GRAPHITE_500}`,
+              textAlign: "center"
+            }}>
+              No recent projects found.
+            </div>
+          ) : (
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+              gap: "20px"
+            }}>
+              {recentProjects.slice(0, 6).map((path) => (
+                <div
+                  key={path}
+                  onClick={() => onOpenProject(path)}
+                  style={{
+                    backgroundColor: COLORS.GRAPHITE_700,
+                    border: `1px solid ${COLORS.GRAPHITE_500}`,
+                    borderRadius: "10px",
+                    padding: "20px",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "16px"
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.borderColor = COLORS.SOLDER_COPPER;
+                    e.currentTarget.style.transform = "translateY(-2px)";
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.borderColor = COLORS.GRAPHITE_500;
+                    e.currentTarget.style.transform = "translateY(0)";
+                  }}
+                >
+                  <div style={{
+                    width: "48px",
+                    height: "48px",
+                    backgroundColor: COLORS.GRAPHITE_900,
+                    borderRadius: "8px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: COLORS.SOLDER_COPPER
+                  }}>
+                    <CircuitBoard size={24} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, color: COLORS.WARM_WHITE, marginBottom: "4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {getProjectName(path)}
+                    </div>
+                    <div style={{ fontSize: "12px", color: COLORS.FOG, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {path}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section>
