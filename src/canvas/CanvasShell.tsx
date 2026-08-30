@@ -12,8 +12,10 @@ import {
   ConnectionMode,
   ReactFlowInstance,
   ReactFlowProvider,
+  Panel as RFPanel,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { Grid } from "lucide-react";
 import { Panel } from "../components/Panel";
 import { COLORS } from "../CONSTANTS/colors";
 import { PartNode } from "./PartNode";
@@ -61,6 +63,7 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [backgroundStyle, setBackgroundStyle] = useState<'dots' | 'lines' | 'plain'>('dots');
   const { setPinMappings, setSerialConnected } = useSimulation();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const routeCache = useRouteCache();
@@ -489,7 +492,7 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
       >
       <div
         ref={reactFlowWrapper}
-        style={{ flex: 1, height: "100%", minHeight: "600px" }}
+        style={{ flex: 1, height: "100%", minHeight: "600px", position: "relative" }}
         onDrop={onDrop}
         onDragOver={onDragOver}
       >
@@ -549,12 +552,49 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
             colorMode="dark"
             deleteKeyCode={["Backspace", "Delete"]}
             style={{ backgroundColor: COLORS.GRAPHITE_900 }}
+            minZoom={0.03}
+            maxZoom={8}
           >
-            <Background
-              variant={BackgroundVariant.Dots}
-              color={COLORS.GRAPHITE_500}
-              gap={20}
-            />
+            {backgroundStyle !== 'plain' && (
+              <Background
+                variant={backgroundStyle === 'dots' ? BackgroundVariant.Dots : BackgroundVariant.Lines}
+                color={COLORS.GRAPHITE_500}
+                gap={20}
+              />
+            )}
+            <RFPanel
+              position="top-left"
+              style={{
+                marginTop: 50,
+                marginLeft: 10,
+                zIndex: 3000,
+              }}
+            >
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setBackgroundStyle((s) => (s === 'dots' ? 'lines' : s === 'lines' ? 'plain' : 'dots'));
+                }}
+                title="Change canvas background"
+                style={{
+                  backgroundColor: COLORS.GRAPHITE_900,
+                  border: `1px solid ${COLORS.GRAPHITE_500}`,
+                  borderRadius: "6px",
+                  padding: "6px 10px",
+                  color: COLORS.WARM_WHITE,
+                  fontSize: "11px",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.5)",
+                  pointerEvents: "all",
+                }}
+              >
+                <Grid size={14} />
+                {backgroundStyle === 'dots' ? 'Dots' : backgroundStyle === 'lines' ? 'Grid' : 'Plain'}
+              </button>
+            </RFPanel>
             {lastError && (
               <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 1000, background: 'red', color: 'white', padding: '4px 8px', borderRadius: 4 }}>
                 {lastError}
