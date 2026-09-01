@@ -5,6 +5,8 @@ use std::io::{BufRead, BufReader, Write};
 use tauri::{Manager, Emitter, path::BaseDirectory};
 use std::sync::Mutex;
 use serialport::SerialPort;
+use std::hash::{Hash, Hasher};
+use std::collections::hash_map::DefaultHasher;
 
 pub struct AppState {
     pub serial_port: Mutex<Option<Box<dyn SerialPort>>>,
@@ -55,6 +57,55 @@ fn get_board_config(fqbn: &str) -> Result<BoardConfig, String> {
             fqbn
         )),
     }
+}
+
+fn find_included_headers(source: &str) -> Vec<String> {
+    // Matches #include <Foo.h> and #include "Foo.h"
+    let re = regex::Regex::new(r#"#include\s*[<"]([A-Za-z0-9_\-]+\.h)[>"]"#).unwrap();
+    re.captures_iter(source)
+        .map(|c| c[1].to_string())
+        .collect()
+}
+
+struct ResolvedLibrary {
+    include_dir: PathBuf,   // root or src/, whichever actually contains the header
+    source_files: Vec<PathBuf>, // all .c/.cpp under include_dir (recursive)
+}
+
+fn resolve_library(header_name: &str, search_roots: &[PathBuf]) -> Option<ResolvedLibrary> {
+    for root in search_roots {
+        if !root.exists() { continue; }
+        let lib_dirs = fs::read_dir(root).ok()?;
+        for lib_dir in lib_dirs.flatten() {
+            let lib_path = lib_dir.path();
+            if !lib_path.is_dir() { continue; }
+
+            for candidate in [lib_path.join("src"), lib_path.clone()] {
+                if candidate.join(header_name).exists() {
+                    let source_files = collect_sources_recursive(&candidate);
+                    return Some(ResolvedLibrary { include_dir: candidate, source_files });
+                }
+            }
+        }
+    }
+    None
+}
+
+fn collect_sources_recursive(dir: &Path) -> Vec<PathBuf> {
+    let mut result = Vec::new();
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                result.extend(collect_sources_recursive(&path));
+            } else if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+                if ext == "c" || ext == "cpp" {
+                    result.push(path);
+                }
+            }
+        }
+    }
+    result
 }
 
 #[tauri::command]
@@ -444,6 +495,16 @@ async fn compile_sketch(
         .map_err(|e| format!("Failed to resolve arduino-variants resource: {}", e))?;
     let arduino_variants = clean_path(arduino_variants_base).join(config.variant);
 
+    let user_libraries_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?.join("libraries");
+    if !user_libraries_dir.exists() {
+        fs::create_dir_all(&user_libraries_dir).map_err(|e| e.to_string())?;
+    }
+    let bundled_libraries_dir = clean_path(
+        app_handle.path().resolve("resources/arduino-libraries", BaseDirectory::Resource)
+            .map_err(|e| format!("Failed to resolve arduino-libraries resource: {}", e))?
+    );
+    let library_search_roots = vec![bundled_libraries_dir, user_libraries_dir];
+
     let sketch_path = clean_path(sketch_path);
     let project_dir = sketch_path.parent().ok_or("Invalid sketch path")?;
     let toolchain_bin = avr_toolchain.join("bin");
@@ -485,6 +546,57 @@ async fn compile_sketch(
         return Err(format!("Arduino variant '{}' not found at: {}", config.variant, arduino_variants.display()));
     }
 
+    // Scan the sketch and every other project source file for #include headers.
+    let mut all_source = fs::read_to_string(&sketch_path).map_err(|e| e.to_string())?;
+    if let Ok(entries) = fs::read_dir(&project_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path == sketch_path {
+                continue;
+            }
+            if matches!(
+                path.extension().and_then(|s| s.to_str()),
+                Some("cpp") | Some("c") | Some("h")
+            ) {
+                if let Ok(contents) = fs::read_to_string(&path) {
+                    all_source.push('\n');
+                    all_source.push_str(&contents);
+                }
+            }
+        }
+    }
+
+    let headers = find_included_headers(&all_source);
+    let mut resolved_libraries: Vec<ResolvedLibrary> = Vec::new();
+    let mut missing_headers: Vec<String> = Vec::new();
+
+    for header in headers {
+        // Skip headers already satisfied by the core itself (e.g. Arduino.h, HardwareSerial.h).
+        if arduino_core.join(&header).exists() {
+            continue;
+        }
+        match resolve_library(&header, &library_search_roots) {
+            Some(lib) => {
+                if !resolved_libraries
+                    .iter()
+                    .any(|r: &ResolvedLibrary| r.include_dir == lib.include_dir)
+                {
+                    resolved_libraries.push(lib);
+                }
+            }
+            None => missing_headers.push(header),
+        }
+    }
+
+    if !missing_headers.is_empty() {
+        return Err(format!(
+            "Missing librar{}: {}. Install {} from the Library Manager before compiling.",
+            if missing_headers.len() == 1 { "y" } else { "ies" },
+            missing_headers.join(", "),
+            if missing_headers.len() == 1 { "it" } else { "them" }
+        ));
+    }
+
     let build_cache = app_handle
         .path()
         .app_data_dir()
@@ -495,6 +607,11 @@ async fn compile_sketch(
         fs::create_dir_all(&build_cache).map_err(|e| e.to_string())?;
     }
     let build_cache = clean_path(build_cache);
+
+    let mut lib_include_args = Vec::new();
+    for lib in &resolved_libraries {
+        lib_include_args.push(format!("-I{}", lib.include_dir.display()));
+    }
 
     // 1. Compile Core Files (with caching)
     let mut core_obj_files = Vec::new();
@@ -531,6 +648,10 @@ async fn compile_sketch(
                         cmd.arg(flag);
                     }
 
+                    for arg in &lib_include_args {
+                        cmd.arg(arg);
+                    }
+
                     cmd.arg(format!("-I{}", arduino_core.display()))
                         .arg(format!("-I{}", arduino_variants.display()))
                         .arg(&path)
@@ -541,6 +662,61 @@ async fn compile_sketch(
                     if !output.status.success() {
                         return Err(format!("Error compiling core file {}: {}", file_name, String::from_utf8_lossy(&output.stderr)));
                     }
+                }
+            }
+        }
+    }
+
+    // 1.5. Compile Library Files (with caching)
+    let mut library_obj_files = Vec::new();
+    for lib in &resolved_libraries {
+        for source in &lib.source_files {
+            let file_name = source.file_name().unwrap().to_string_lossy();
+            let extension = source.extension().and_then(|s| s.to_str());
+            let is_cpp = extension == Some("cpp");
+
+            let mut hasher = DefaultHasher::new();
+            source.parent().unwrap().hash(&mut hasher);
+            let dir_hash = hasher.finish();
+
+            let obj_file = build_cache.join(format!("{:x}_{}.o", dir_hash, file_name));
+            library_obj_files.push(obj_file.clone());
+
+            if !obj_file.exists() {
+                let mut cmd = Command::new(if is_cpp { &avr_gxx } else { &avr_gcc });
+                cmd.arg("-c")
+                    .arg("-g")
+                    .arg("-Os")
+                    .arg("-w")
+                    .arg("-ffunction-sections")
+                    .arg("-fdata-sections")
+                    .arg(format!("-mmcu={}", config.mcu))
+                    .arg(format!("-DF_CPU={}", config.f_cpu))
+                    .arg("-DARDUINO=10810");
+
+                for flag in config.extra_flags {
+                    cmd.arg(flag);
+                }
+
+                for arg in &lib_include_args {
+                    cmd.arg(arg);
+                }
+
+                cmd.arg(format!("-I{}", arduino_core.display()))
+                    .arg(format!("-I{}", arduino_variants.display()))
+                    .arg(format!("-I{}", lib.include_dir.display()));
+
+                for arg in &lib_include_args {
+                    cmd.arg(arg);
+                }
+
+                cmd.arg(source)
+                    .arg("-o")
+                    .arg(&obj_file);
+
+                let output = cmd.output().map_err(|e| format!("Failed to compile library file {}: {}", file_name, e))?;
+                if !output.status.success() {
+                    return Err(format!("Error compiling library file {}: {}", file_name, String::from_utf8_lossy(&output.stderr)));
                 }
             }
         }
@@ -584,6 +760,10 @@ async fn compile_sketch(
                     cmd.arg(flag);
                 }
 
+                for arg in &lib_include_args {
+                    cmd.arg(arg);
+                }
+
                 cmd.arg(format!("-I{}", arduino_core.display()))
                     .arg(format!("-I{}", arduino_variants.display()))
                     .arg(format!("-I{}", project_dir.display()))
@@ -615,6 +795,10 @@ async fn compile_sketch(
         compile_cmd.arg(flag);
     }
 
+    for arg in &lib_include_args {
+        compile_cmd.arg(arg);
+    }
+
     let compile_output = compile_cmd.arg(format!("-I{}", arduino_core.display()))
         .arg(format!("-I{}", arduino_variants.display()))
         .arg(format!("-I{}", project_dir.display()))
@@ -643,6 +827,10 @@ async fn compile_sketch(
         .arg(&sketch_obj);
 
     for obj in &extra_obj_files {
+        link_cmd.arg(obj);
+    }
+
+    for obj in &library_obj_files {
         link_cmd.arg(obj);
     }
 
@@ -798,6 +986,128 @@ async fn upload_hex(
     }
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct LibraryCatalogEntry {
+    name: String,
+    author: String,
+    version: String,
+    description: String,
+    bundled: bool,
+}
+
+#[tauri::command]
+fn get_library_catalog(app_handle: tauri::AppHandle) -> Result<Vec<LibraryCatalogEntry>, String> {
+    let path = clean_path(
+        app_handle.path().resolve("resources/library-catalog.json", BaseDirectory::Resource)
+            .map_err(|e| e.to_string())?
+    );
+    let raw = fs::read_to_string(path).map_err(|e| e.to_string())?;
+    serde_json::from_str(&raw).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn install_bundled_library(app_handle: tauri::AppHandle, name: String) -> Result<(), String> {
+    let bundled_dir = clean_path(
+        app_handle.path().resolve("resources/arduino-libraries", BaseDirectory::Resource)
+            .map_err(|e| e.to_string())?
+    ).join(&name);
+    if !bundled_dir.exists() {
+        return Err(format!("'{}' is not a bundled library", name));
+    }
+    let dest = app_handle.path().app_data_dir().map_err(|e| e.to_string())?.join("libraries").join(&name);
+    copy_dir_recursive(&bundled_dir, &dest).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn remove_library(app_handle: tauri::AppHandle, name: String) -> Result<(), String> {
+    let dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?.join("libraries").join(&name);
+    if dir.exists() {
+        fs::remove_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+fn extract_library_zip(app_handle: &tauri::AppHandle, zip_path: &Path) -> Result<String, String> {
+    let file = fs::File::open(zip_path).map_err(|e| e.to_string())?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
+
+    let libraries_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?.join("libraries");
+    fs::create_dir_all(&libraries_dir).map_err(|e| e.to_string())?;
+
+    // Extract to a temp staging dir first
+    let staging = std::env::temp_dir().join(format!("pisso-lib-import-{}", std::process::id()));
+    if staging.exists() {
+        fs::remove_dir_all(&staging).map_err(|e| e.to_string())?;
+    }
+    fs::create_dir_all(&staging).map_err(|e| e.to_string())?;
+
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
+        let outpath = staging.join(entry.name());
+        if entry.name().ends_with('/') {
+            fs::create_dir_all(&outpath).map_err(|e| e.to_string())?;
+        } else {
+            if let Some(parent) = outpath.parent() {
+                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            let mut outfile = fs::File::create(&outpath).map_err(|e| e.to_string())?;
+            std::io::copy(&mut entry, &mut outfile).map_err(|e| e.to_string())?;
+        }
+    }
+
+    let entries: Vec<_> = fs::read_dir(&staging).map_err(|e| e.to_string())?.flatten().collect();
+    let source_root = if entries.len() == 1 && entries[0].path().is_dir() {
+        entries[0].path()
+    } else {
+        staging.clone()
+    };
+
+    let lib_name = source_root.file_name().ok_or("Could not determine library name")?.to_string_lossy().to_string();
+    let dest = libraries_dir.join(&lib_name);
+    if dest.exists() {
+        fs::remove_dir_all(&dest).map_err(|e| e.to_string())?;
+    }
+    copy_dir_recursive(&source_root, &dest).map_err(|e| e.to_string())?;
+    let _ = fs::remove_dir_all(&staging);
+
+    Ok(lib_name)
+}
+
+#[tauri::command]
+fn install_library_from_zip(app_handle: tauri::AppHandle, zip_path: String) -> Result<String, String> {
+    extract_library_zip(&app_handle, Path::new(&zip_path))
+}
+
+fn copy_dir_recursive(src: &Path, dest: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(dest)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let dest_path = dest.join(entry.file_name());
+        if entry.path().is_dir() {
+            copy_dir_recursive(&entry.path(), &dest_path)?;
+        } else {
+            fs::copy(entry.path(), dest_path)?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn list_installed_libraries(app_handle: tauri::AppHandle) -> Result<Vec<String>, String> {
+    let user_libraries_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?.join("libraries");
+    if !user_libraries_dir.exists() {
+        return Ok(Vec::new());
+    }
+    let mut names = Vec::new();
+    for entry in fs::read_dir(&user_libraries_dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        if entry.path().is_dir() {
+            names.push(entry.file_name().to_string_lossy().to_string());
+        }
+    }
+    Ok(names)
+}
+
 #[tauri::command]
 fn open_serial(
     app_handle: tauri::AppHandle,
@@ -863,6 +1173,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_fs::init())
         .manage(AppState {
             serial_port: Mutex::new(None),
         })
@@ -885,7 +1197,12 @@ pub fn run() {
             list_serial_ports,
             open_serial,
             close_serial,
-            write_to_serial
+            write_to_serial,
+            list_installed_libraries,
+            get_library_catalog,
+            install_bundled_library,
+            remove_library,
+            install_library_from_zip
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

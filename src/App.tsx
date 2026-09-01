@@ -21,6 +21,7 @@ import { AIView } from "./views/AI";
 import { ClassesView } from "./views/Classes";
 import { SavedView } from "./views/Saved";
 import { ProfileView } from "./views/Profile";
+import { LibrariesView } from "./views/Libraries";
 import { X } from "lucide-react";
 import { COLORS } from "./CONSTANTS/colors";
 
@@ -405,6 +406,9 @@ function App() {
 
       {/* Profile View */}
       {view === "profile" && <ProfileView />}
+
+      {/* Libraries View */}
+      {view === "libraries" && <LibrariesView />}
 
       {/* Design Mode Content - Only visible in Workspace */}
       <div

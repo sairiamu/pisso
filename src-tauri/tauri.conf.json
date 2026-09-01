@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Pissow",
         "width": 800,
         "height": 600
@@ -34,7 +35,9 @@
     "resources": [
       "resources/avr-toolchain",
       "resources/arduino-core",
-      "resources/arduino-variants"
+      "resources/arduino-variants",
+      "resources/library-catalog.json",
+      "resources/arduino-libraries"
     ]
   }
 }

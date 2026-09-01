@@ -9,5 +9,6 @@ export const COLORS = {
   FOG: "#9A9FA6",
 } as const;
 
+
 export type ColorKey = keyof typeof COLORS;
 export type ColorValue = typeof COLORS[ColorKey];
