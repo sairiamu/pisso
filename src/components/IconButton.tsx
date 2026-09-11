@@ -1,5 +1,5 @@
 import React from "react";
-import { Button, ButtonProps } from "./Button";
+import { Button, ButtonProps, ButtonSize } from "./Button";
 
 interface IconButtonProps extends Omit<ButtonProps, "leftIcon" | "rightIcon"> {
   icon: React.ReactNode;
@@ -11,13 +11,13 @@ export const IconButton: React.FC<IconButtonProps> = ({
   style,
   ...props
 }) => {
-  const sizeMap = {
+  const sizeMap: Record<ButtonSize, string> = {
     sm: "28px",
     md: "36px",
     lg: "44px",
   };
 
-  const dimension = sizeMap[size];
+  const dimension = sizeMap[size as ButtonSize];
 
   return (
     <Button

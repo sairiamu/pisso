@@ -1,5 +1,3 @@
-import { PinState } from "../simulator/engine";
-
 /**
  * Validates and retrieves a pin value from the pinValues record.
  * Warns in the console if a component tries to access a pin name

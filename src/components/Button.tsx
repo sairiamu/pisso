@@ -6,7 +6,7 @@ import { Spinner } from "./Spinner";
 export type ButtonVariant = "primary" | "secondary" | "neutral" | "danger" | "ghost";
 export type ButtonSize = "sm" | "md" | "lg";
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;
   isLoading?: boolean;

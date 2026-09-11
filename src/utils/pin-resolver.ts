@@ -1,4 +1,4 @@
-import { PartDefinition, PinDefinition } from "../parts/types";
+import { PartDefinition } from "../parts/types";
 
 export interface ResolvedPin {
   name: string;
