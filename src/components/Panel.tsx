@@ -26,6 +26,24 @@ const Screw: React.FC<{ style: React.CSSProperties }> = ({ style }) => (
   />
 );
 
+export const PanelHeader: React.FC<{ children: React.ReactNode; style?: React.CSSProperties }> = ({ children, style }) => (
+  <div style={{ padding: "12px 16px", borderBottom: `1px solid ${COLORS.GRAPHITE_500}`, ...style }}>
+    {children}
+  </div>
+);
+
+export const PanelBody: React.FC<{ children: React.ReactNode; style?: React.CSSProperties }> = ({ children, style }) => (
+  <div style={{ padding: "16px", ...style }}>
+    {children}
+  </div>
+);
+
+export const PanelFooter: React.FC<{ children: React.ReactNode; style?: React.CSSProperties }> = ({ children, style }) => (
+  <div style={{ padding: "12px 16px", borderTop: `1px solid ${COLORS.GRAPHITE_500}`, ...style }}>
+    {children}
+  </div>
+);
+
 export const Panel: React.FC<PanelProps> = ({
   children,
   showScrews = true,

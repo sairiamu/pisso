@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { LayoutDashboard, FolderHeart, Sparkles, GraduationCap, User, Save, CircuitBoard, Plus, Package } from "lucide-react";
+import { LayoutDashboard, FolderHeart, Sparkles, GraduationCap, User, Save, CircuitBoard, Plus, Package, Beaker } from "lucide-react";
 import { Panel } from "../components/Panel";
 import { COLORS } from "../CONSTANTS/colors";
 import { PANEL } from "../CONSTANTS/panel";
@@ -18,7 +18,7 @@ import { BoardInfo } from "./CanvasShell";
 
 import { FileEntry } from "../App";
 
-export type AppView = "dashboard" | "saved" | "ai" | "classes" | "profile" | "libraries" | "workspace";
+export type AppView = "dashboard" | "saved" | "ai" | "classes" | "profile" | "libraries" | "workspace" | "component-lab";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -400,6 +400,25 @@ export const AppShell: React.FC<AppShellProps> = ({
               }}
             >
               <Package size={22} />
+            </button>
+            <button
+              onClick={() => onViewChange("component-lab")}
+              title="Component Lab"
+              style={{
+                width: "36px",
+                height: "36px",
+                borderRadius: "8px",
+                backgroundColor: view === "component-lab" ? COLORS.SOLDER_COPPER : "transparent",
+                border: "none",
+                color: view === "component-lab" ? COLORS.WARM_WHITE : COLORS.FOG,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.2s ease"
+              }}
+            >
+              <Beaker size={22} />
             </button>
             <button
               onClick={() => onViewChange("classes")}

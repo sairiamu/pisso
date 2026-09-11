@@ -22,6 +22,7 @@ import { ClassesView } from "./views/Classes";
 import { SavedView } from "./views/Saved";
 import { ProfileView } from "./views/Profile";
 import { LibrariesView } from "./views/Libraries";
+import { ComponentLab } from "./components/Showcase";
 import { X } from "lucide-react";
 import { COLORS } from "./CONSTANTS/colors";
 
@@ -409,6 +410,9 @@ function App() {
 
       {/* Libraries View */}
       {view === "libraries" && <LibrariesView />}
+
+      {/* Component Lab View */}
+      {view === "component-lab" && <ComponentLab />}
 
       {/* Design Mode Content - Only visible in Workspace */}
       <div
