@@ -57,5 +57,13 @@ export const ProjectApi = {
 
   listProjects: async (): Promise<string[]> => {
     return await invoke<string[]>("list_projects");
+  },
+
+  renameProject: async (projectPath: string, newName: string): Promise<string> => {
+    return await invoke<string>("rename_project", { projectPath, newName });
+  },
+
+  deleteProject: async (projectPath: string): Promise<void> => {
+    await invoke("delete_project", { projectPath });
   }
 };

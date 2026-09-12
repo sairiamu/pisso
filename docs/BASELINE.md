@@ -39,6 +39,14 @@
 - **Framework:** Tauri v2
 - **Frontend:** React, Vite, TypeScript
 - **Backend:** Rust
+- **Project Schema (Version 1):**
+  - `pisso.json`: Project metadata (name, schemaVersion, activeFileIndex).
+  - `design/circuit.json`: Circuit diagram state.
+  - `src/`: Source code files (.ino, .cpp, .h).
+  - `libraries/`: Project-specific libraries.
+  - `assets/`: Project assets.
+  - `build/`: Build artifacts.
+  - `simulation/`: Simulation-related data.
 - **Key Features:**
   - Arduino-like IDE with multi-tab support (`EditorTabs.tsx`).
   - Simulation support (implied by `avr8js` and `simulator/engine` imports).
@@ -46,8 +54,7 @@
   - Serial port communication for uploading and monitoring.
   - Project persistence in `app_data_dir/projects`.
   - Build caching for core and library object files.
-
-## Tauri Commands (Backend API)
+  - Automatic migration from legacy fragmented project structures.
 The following commands are exposed to the frontend via `pissow_lib`:
 - `create_new_project`: Initializes a project structure with `design` and `code` folders.
 - `list_projects`: Lists existing projects in app data.

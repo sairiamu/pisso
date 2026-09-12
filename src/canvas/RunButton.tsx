@@ -3,7 +3,7 @@ import { COLORS } from "../CONSTANTS/colors";
 import { writeSketch } from "../domain/sketch-generator";
 import { FileEntry } from "../App";
 import { BoardInfo } from "../domain/models";
-import { ProjectService } from "../application/project-service";
+import { ProjectManager } from "../application/ProjectManager";
 import { CompilerService } from "../application/compiler-service";
 
 interface RunButtonProps {
@@ -39,7 +39,7 @@ export const RunButton: React.FC<RunButtonProps> = ({
     if (!activePath) {
       try {
         // Automatically use a playground directory if no project is open
-        activePath = await ProjectService.getPlaygroundPath();
+        activePath = await ProjectManager.getPlaygroundPath();
         if (activePath && onProjectPathChange) {
           onProjectPathChange(activePath);
         }

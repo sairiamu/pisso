@@ -2,32 +2,36 @@ import React, { useState, useEffect } from "react";
 import { Plus, FolderOpen, Clock, Folder, ChevronDown, CircuitBoard } from "lucide-react";
 import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
-import { ProjectService } from "../application/project-service";
+import { ProjectManager, ProjectStatus } from "../application/ProjectManager";
 
 interface DashboardProps {
   onNewProject: () => void;
   onOpenProject: (path?: string) => void;
   onSaveProject?: () => void;
+  onSaveProjectAs?: () => void;
   onCloseProject?: () => void;
   onSelectView?: (view: any) => void;
   onSelectMode?: (mode: any) => void;
   projectPath: string | null;
+  status: ProjectStatus;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
   onNewProject,
   onOpenProject,
   onSaveProject,
+  onSaveProjectAs,
   onCloseProject,
   onSelectView,
   onSelectMode,
-  projectPath
+  projectPath,
+  status
 }) => {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [recentProjects, setRecentProjects] = useState<string[]>([]);
 
   useEffect(() => {
-    ProjectService.getRecentProjects().then(setRecentProjects).catch(() => setRecentProjects([]));
+    ProjectManager.getRecentProjects().then(setRecentProjects).catch(() => setRecentProjects([]));
   }, []);
 
   const getProjectName = (path: string) => {
@@ -109,15 +113,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <div style={menuItemStyle()} onClick={onNewProject}>New Project</div>
               <div style={menuItemStyle()} onClick={() => onOpenProject()}>Open Project</div>
               <div
-                style={menuItemStyle()}
-                onClick={() => onSaveProject?.()}
+                style={menuItemStyle(status === "closed")}
+                onClick={() => status !== "closed" && onSaveProject?.()}
               >
                 Save Project
               </div>
-              <div style={menuItemStyle(true)}>Save As...</div>
               <div
-                style={{ ...menuItemStyle(!projectPath), borderTop: `1px solid ${COLORS.GRAPHITE_500}`, marginTop: "4px" }}
-                onClick={() => projectPath && onCloseProject?.()}
+                style={menuItemStyle(status === "closed")}
+                onClick={() => status !== "closed" && onSaveProjectAs?.()}
+              >
+                Save As...
+              </div>
+              <div
+                style={{ ...menuItemStyle(status === "closed"), borderTop: `1px solid ${COLORS.GRAPHITE_500}`, marginTop: "4px" }}
+                onClick={() => status !== "closed" && onCloseProject?.()}
               >
                 Close Project
               </div>
@@ -132,14 +141,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
           {activeMenu === 'view' && (
             <div style={dropdownStyle}>
               <div
-                style={menuItemStyle(!projectPath)}
-                onClick={() => { if(projectPath) { onSelectView?.('workspace'); onSelectMode?.('design'); }}}
+                style={menuItemStyle(status === "closed")}
+                onClick={() => { if(status !== "closed") { onSelectView?.('workspace'); onSelectMode?.('design'); }}}
               >
                 Design
               </div>
               <div
-                style={menuItemStyle(!projectPath)}
-                onClick={() => { if(projectPath) { onSelectView?.('workspace'); onSelectMode?.('code'); }}}
+                style={menuItemStyle(status === "closed")}
+                onClick={() => { if(status !== "closed") { onSelectView?.('workspace'); onSelectMode?.('code'); }}}
               >
                 Code
               </div>

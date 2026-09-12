@@ -43,7 +43,7 @@ export async function saveFullProject(
 }
 
 /**
- * Saves the current diagram state to design/diagram.json in the specified project directory.
+ * Saves the current diagram state to design/circuit.json in the specified project directory.
  */
 export async function saveProject(projectPath: string, diagram: Diagram): Promise<void> {
   const serialized = save(diagram);
@@ -52,14 +52,14 @@ export async function saveProject(projectPath: string, diagram: Diagram): Promis
 }
 
 /**
- * Saves all code files to the code/ directory in the specified project directory.
+ * Saves all code files to the src/ directory in the specified project directory.
  */
 export async function saveProjectFiles(projectPath: string, files: ProjectFile[]): Promise<void> {
   await invoke("save_project_files", { projectPath, files });
 }
 
 /**
- * Loads the diagram state from design/diagram.json in the specified project directory.
+ * Loads the diagram state from design/circuit.json in the specified project directory.
  */
 export async function loadProject(projectPath: string): Promise<Diagram> {
   const jsonString = await invoke<string>("load_diagram", { projectPath });
@@ -68,14 +68,14 @@ export async function loadProject(projectPath: string): Promise<Diagram> {
 }
 
 /**
- * Loads all code files from the code/ directory in the specified project directory.
+ * Loads all code files from the src/ directory in the specified project directory.
  */
 export async function loadProjectFiles(projectPath: string): Promise<ProjectFile[]> {
   return await invoke<ProjectFile[]>("load_project_files", { projectPath });
 }
 
 /**
- * Saves project metadata (e.g., active file index) to project.json.
+ * Saves project metadata (e.g., active file index) to pisso.json.
  */
 export async function saveProjectMetadata(projectPath: string, metadata: any): Promise<void> {
   const jsonString = JSON.stringify(metadata, null, 2);
@@ -83,7 +83,7 @@ export async function saveProjectMetadata(projectPath: string, metadata: any): P
 }
 
 /**
- * Loads project metadata from project.json.
+ * Loads project metadata from pisso.json.
  */
 export async function loadProjectMetadata(projectPath: string): Promise<any> {
   const jsonString = await invoke<string>("load_project_metadata", { projectPath });

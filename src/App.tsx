@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { ProjectService } from "./application/project-service";
+import { ProjectManager, ProjectState, ProjectStatus } from "./application/ProjectManager";
 import { CanvasShell, CanvasShellHandle } from "./canvas/CanvasShell";
 import { BoardInfo } from "./domain/models";
 import { AppShell, AppView } from "./canvas/AppShell";
@@ -16,13 +16,47 @@ import { SavedView } from "./views/Saved";
 import { ProfileView } from "./views/Profile";
 import { LibrariesView } from "./views/Libraries";
 import { ComponentLab } from "./components/Showcase";
-import { X } from "lucide-react";
+import { X, AlertTriangle } from "lucide-react";
 import { COLORS } from "./CONSTANTS/colors";
 import { SystemApi } from "./infrastructure/tauri/system-api";
 
 export interface FileEntry {
   name: string;
   content: string;
+}
+
+export interface ProjectDiagnostic {
+  type: string;
+  file: string;
+  message: string;
+  current?: number;
+  required?: number;
+}
+
+function formatError(e: any): React.ReactNode {
+  const message = e instanceof Error ? e.message : String(e);
+  try {
+    const diagnostic = JSON.parse(message) as ProjectDiagnostic;
+    if (diagnostic && diagnostic.type) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <div style={{ fontWeight: 700, color: COLORS.SOLDER_COPPER }}>{diagnostic.type.replace('_', ' ')}</div>
+          <div style={{ fontSize: '13px' }}>
+            <span style={{ opacity: 0.7 }}>File:</span> {diagnostic.file}
+          </div>
+          <div style={{ fontSize: '13px' }}>
+            <span style={{ opacity: 0.7 }}>Error:</span> {diagnostic.message}
+          </div>
+          {diagnostic.type === 'VERSION_MISMATCH' && (
+             <div style={{ fontSize: '12px', marginTop: '4px', color: COLORS.FAULT_RED }}>
+               Project version ({diagnostic.current}) is newer than the application supports ({diagnostic.required}).
+             </div>
+          )}
+        </div>
+      );
+    }
+  } catch (err) {}
+  return message;
 }
 
 const INITIAL_CODE = `#include <Arduino.h>
@@ -43,7 +77,8 @@ void loop() {
 `;
 
 function App() {
-  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<ProjectStatus>("closed");
+  const [errorContent, setErrorContent] = useState<React.ReactNode | null>(null);
   const [projectPath, setProjectPath] = useState<string | null>(null);
   const [view, setView] = useState<AppView>("dashboard");
   const [files, setFiles] = useState<FileEntry[]>([
@@ -57,10 +92,30 @@ function App() {
   const [debugStatus, setDebugStatus] = useState<string>("");
   const [isNaming, setIsNaming] = useState(false);
   const [projectName, setProjectName] = useState("");
-  const [isProjectActive, setIsProjectActive] = useState(false);
   const [boards, setBoards] = useState<BoardInfo[]>([]);
   const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
+  const [isClosingDirty, setIsClosingDirty] = useState(false);
   const canvasRef = useRef<CanvasShellHandle>(null);
+
+  const lastSavedState = useRef<{ circuit: string, files: string }>({ circuit: '', files: '' });
+
+  const updateLastSaved = useCallback((c: any, f: any) => {
+    lastSavedState.current = {
+      circuit: JSON.stringify(c),
+      files: JSON.stringify(f)
+    };
+  }, []);
+
+  // Dirty detection
+  useEffect(() => {
+    if (status === "ready") {
+      const currentCircuit = JSON.stringify(circuit);
+      const currentFiles = JSON.stringify(files);
+      if (currentCircuit !== lastSavedState.current.circuit || currentFiles !== lastSavedState.current.files) {
+        setStatus("dirty");
+      }
+    }
+  }, [circuit, files, status]);
 
   useEffect(() => {
     if (boards.length > 0) {
@@ -97,35 +152,39 @@ function App() {
 
   useEffect(() => {
     const handleError = (event: ErrorEvent) => {
-      // Ignore ResizeObserver loop limit errors, which are generally harmless
-      // but triggered by components like CodeMirror or XYFlow during layout.
+      // Ignore ResizeObserver loop limit errors
       if (event.message === "ResizeObserver loop completed with undelivered notifications." ||
           event.message === "ResizeObserver loop limit exceeded") {
         return;
       }
-      setError(event.message);
+      setErrorContent(event.message);
+      setStatus("error");
     };
     window.addEventListener("error", handleError);
     return () => window.removeEventListener("error", handleError);
   }, []);
 
   const handleNewProject = async (name: string) => {
+    setStatus("loading");
     try {
-      const newProjectPath = await ProjectService.createNewProject(name);
+      const state = await ProjectManager.create(name);
 
-      setProjectPath(newProjectPath);
-      setFiles([{ name: "sketch.ino", content: INITIAL_CODE }]);
-      setActiveFileIndex(0);
-      setIsProjectActive(true);
+      setProjectPath(state.path);
+      setFiles(state.files);
+      setActiveFileIndex(state.activeFileIndex);
+      setCircuit(state.circuit);
+      setProjectName(state.name);
+
+      updateLastSaved(state.circuit, state.files);
+      setStatus("ready");
       setView("workspace");
       setMode("design");
-
-      clearCircuit();
 
       setDebugStatus(`Project "${name}" created`);
       setTimeout(() => setDebugStatus(""), 2000);
     } catch (e) {
-      setError(`Failed to create project: ${e}`);
+      setErrorContent(formatError(e));
+      setStatus("error");
     }
   };
 
@@ -140,94 +199,128 @@ function App() {
   };
 
   const handleSave = async () => {
-    let currentPath = projectPath;
-
-    if (!currentPath) {
-      let defaultPath: string | undefined;
-      try {
-        defaultPath = await ProjectService.getProjectsPath();
-      } catch (e) {}
-
-      const selected = await SystemApi.openDirectoryDialog(
-        defaultPath,
-        "Select Folder to Save Project"
-      );
-      if (selected) {
-        currentPath = selected;
-        setProjectPath(selected);
-      } else {
-        return; // User cancelled
-      }
-    }
-
     if (!canvasRef.current) return;
+    setStatus("saving");
     try {
-      // Save everything (Design + Code) in one atomic-like operation
-      await ProjectService.saveFullProject(currentPath, circuit, files);
+      const currentState: ProjectState = {
+        path: projectPath,
+        name: projectName || projectPath?.split(/[/\\]/).pop() || "Untitled",
+        files,
+        circuit,
+        activeFileIndex,
+        status: "saving"
+      };
 
-      await ProjectService.addRecentProject(currentPath);
+      const savedState = await ProjectManager.save(currentState);
 
-      // Save metadata separately as it's not core project data
-      await ProjectService.saveProjectMetadata(currentPath, { activeFileIndex });
+      setProjectPath(savedState.path);
+      setProjectName(savedState.name);
+
+      updateLastSaved(circuit, files);
+      setStatus("ready");
 
       setDebugStatus("Project saved successfully");
       setTimeout(() => setDebugStatus(""), 2000);
+      return true;
     } catch (e) {
-      setError(`Save Failed: ${e}`);
+      if (e instanceof Error && e.message === "Save As cancelled") {
+        setStatus("dirty");
+        return false;
+      }
+      setErrorContent(formatError(e));
+      setStatus("error");
       console.error("Project save error:", e);
+      return false;
+    }
+  };
+
+  const handleSaveAs = async () => {
+    if (!canvasRef.current) return;
+    const oldStatus = status;
+    setStatus("saving");
+    try {
+      const currentState: ProjectState = {
+        path: projectPath,
+        name: projectName || projectPath?.split(/[/\\]/).pop() || "Untitled",
+        files,
+        circuit,
+        activeFileIndex,
+        status: "saving"
+      };
+
+      const savedState = await ProjectManager.saveAs(currentState);
+
+      setProjectPath(savedState.path);
+      setProjectName(savedState.name);
+
+      updateLastSaved(circuit, files);
+      setStatus("ready");
+
+      setDebugStatus(`Project saved as "${savedState.name}"`);
+      setTimeout(() => setDebugStatus(""), 2000);
+      return true;
+    } catch (e) {
+      if (e instanceof Error && e.message === "Save As cancelled") {
+        setStatus(oldStatus);
+        return false;
+      }
+      setErrorContent(formatError(e));
+      setStatus("error");
+      return false;
     }
   };
 
   const handleOpen = async (path?: string) => {
-    let selected: string | null = null;
+    setStatus("loading");
+    try {
+      const state = await ProjectManager.open(path);
 
-    if (path) {
-      selected = path;
-    } else {
-      let defaultPath: string | undefined;
-      try {
-        defaultPath = await ProjectService.getProjectsPath();
-      } catch (e) {}
+      setProjectPath(state.path);
+      setFiles(state.files);
+      setActiveFileIndex(state.activeFileIndex);
+      setCircuit(state.circuit);
+      setProjectName(state.name);
 
-      selected = await SystemApi.openDirectoryDialog(
-        defaultPath,
-        "Open Project Folder"
-      );
-    }
-
-    if (selected) {
-      try {
-        const circuit = await ProjectService.loadProject(selected);
-        const projectFiles = await ProjectService.loadProjectFiles(selected);
-        const metadata = await ProjectService.loadProjectMetadata(selected);
-
-        setProjectPath(selected);
-        await ProjectService.addRecentProject(selected);
-        setCircuit(circuit);
-
-        if (projectFiles.length > 0) {
-          setFiles(projectFiles);
-          if (metadata && typeof metadata.activeFileIndex === 'number' && metadata.activeFileIndex < projectFiles.length) {
-            setActiveFileIndex(metadata.activeFileIndex);
-          } else {
-            setActiveFileIndex(0);
-          }
-        }
-
-        setIsProjectActive(true);
-        setView("workspace");
-        setMode("design"); // Default to design when opening
-      } catch (e) {
-        setError("Failed to load project: " + e);
+      updateLastSaved(state.circuit, state.files);
+      setStatus("ready");
+      setView("workspace");
+      setMode("design");
+    } catch (e) {
+      if (e instanceof Error && e.message === "No project selected") {
+        setStatus("closed");
+        return;
       }
+      setErrorContent(formatError(e));
+      setStatus("error");
     }
   };
 
-  const handleCloseProject = () => {
+  const forceCloseProject = async () => {
+    await ProjectManager.close();
     setProjectPath(null);
-    setIsProjectActive(false);
+    setStatus("closed");
     clearCircuit();
     setView("dashboard");
+    setIsClosingDirty(false);
+  };
+
+  const handleCloseProject = async () => {
+    if (status === 'dirty') {
+      setIsClosingDirty(true);
+      return;
+    }
+    await forceCloseProject();
+  };
+
+  const handleDiscardChanges = async () => {
+    await forceCloseProject();
+  };
+
+  const handleSaveAndClose = async () => {
+    const success = await handleSave();
+    if (success) {
+      await forceCloseProject();
+    }
   };
 
   const handleAddPart = useCallback((type: string) => {
@@ -245,12 +338,77 @@ function App() {
     setTimeout(() => setDebugStatus(""), 2000);
   }, [circuit.components.length, addComponent]);
 
-  if (error) {
+  if (status === "error") {
     return (
-      <div style={{ backgroundColor: "red", color: "white", padding: 20 }}>
-        <h1>Runtime Error</h1>
-        <pre>{error}</pre>
-        <button onClick={() => setError(null)}>Dismiss</button>
+      <div style={{
+        backgroundColor: COLORS.GRAPHITE_900,
+        color: COLORS.WARM_WHITE,
+        padding: "40px",
+        height: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily: "Inter, sans-serif"
+      }}>
+        <div style={{
+          backgroundColor: COLORS.GRAPHITE_700,
+          border: `1px solid ${COLORS.FAULT_RED}`,
+          borderRadius: "12px",
+          padding: "32px",
+          maxWidth: "600px",
+          width: "100%",
+          boxShadow: "0 20px 40px rgba(0,0,0,0.5)"
+        }}>
+          <h1 style={{ color: COLORS.FAULT_RED, marginTop: 0, display: "flex", alignItems: "center", gap: "12px" }}>
+            <AlertTriangle size={32} /> Runtime Error
+          </h1>
+          <div style={{
+            backgroundColor: COLORS.GRAPHITE_900,
+            padding: "16px",
+            borderRadius: "6px",
+            border: `1px solid ${COLORS.GRAPHITE_500}`,
+            marginBottom: "24px",
+            overflow: "auto",
+            maxHeight: "300px"
+          }}>
+            <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{errorContent}</pre>
+          </div>
+          <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+            <button
+              onClick={() => {
+                setStatus("closed");
+                setErrorContent(null);
+                setView("dashboard");
+              }}
+              style={{
+                backgroundColor: COLORS.GRAPHITE_500,
+                color: COLORS.WARM_WHITE,
+                border: "none",
+                padding: "10px 20px",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontWeight: 600
+              }}
+            >
+              Back to Dashboard
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                backgroundColor: COLORS.SOLDER_COPPER,
+                color: COLORS.WARM_WHITE,
+                border: "none",
+                padding: "10px 20px",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontWeight: 600
+              }}
+            >
+              Reload Application
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -265,19 +423,92 @@ function App() {
       onOpenProject={handleOpen}
       onSaveProject={handleSave}
       onCloseProject={handleCloseProject}
-      saveDisabled={false}
+      saveDisabled={status === "saving" || status === "loading" || status === "ready"}
       lastHex={lastHex}
       isSimulating={isSimulating}
       onSimulateToggle={setIsSimulating}
       projectPath={projectPath}
-      isProjectActive={isProjectActive}
       files={files}
       onCompileSuccess={setLastHex}
       boards={boards}
       selectedBoardId={selectedBoardId}
       onSelectBoard={setSelectedBoardId}
       setDebugStatus={setDebugStatus}
+      status={status}
     >
+      {isClosingDirty && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(0,0,0,0.85)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 30000
+        }}>
+          <div style={{
+            backgroundColor: COLORS.GRAPHITE_700,
+            border: `1px solid ${COLORS.GRAPHITE_500}`,
+            borderRadius: "12px",
+            padding: "32px",
+            width: "450px",
+            boxShadow: "0 20px 40px rgba(0,0,0,0.5)"
+          }}>
+            <h2 style={{ color: COLORS.WARM_WHITE, marginTop: 0, marginBottom: "16px" }}>Unsaved Changes</h2>
+            <p style={{ color: COLORS.FOG, lineHeight: 1.5, marginBottom: "24px" }}>
+              Project "{projectName}" has unsaved changes. Do you want to save them before closing?
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <button
+                onClick={handleSaveAndClose}
+                style={{
+                  backgroundColor: COLORS.SOLDER_COPPER,
+                  color: COLORS.WARM_WHITE,
+                  border: "none",
+                  padding: "12px",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontWeight: 600
+                }}
+              >
+                Save and Close
+              </button>
+              <button
+                onClick={handleDiscardChanges}
+                style={{
+                  backgroundColor: "transparent",
+                  color: COLORS.FAULT_RED,
+                  border: `1px solid ${COLORS.FAULT_RED}`,
+                  padding: "12px",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontWeight: 600
+                }}
+              >
+                Discard Changes
+              </button>
+              <button
+                onClick={() => setIsClosingDirty(false)}
+                style={{
+                  backgroundColor: "transparent",
+                  color: COLORS.FOG,
+                  border: `1px solid ${COLORS.GRAPHITE_500}`,
+                  padding: "12px",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontWeight: 600
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isNaming && (
         <div style={{
           position: "fixed",
@@ -370,16 +601,47 @@ function App() {
         </div>
       )}
 
+      {(status === "loading" || status === "saving") && (
+         <div style={{
+           position: "fixed",
+           bottom: "20px",
+           right: "20px",
+           backgroundColor: COLORS.GRAPHITE_700,
+           color: COLORS.WARM_WHITE,
+           padding: "12px 20px",
+           borderRadius: "8px",
+           border: `1px solid ${COLORS.SOLDER_COPPER}`,
+           zIndex: 10000,
+           display: "flex",
+           alignItems: "center",
+           gap: "12px",
+           boxShadow: "0 4px 12px rgba(0,0,0,0.5)"
+         }}>
+           <div className="spinner" style={{
+             width: "16px",
+             height: "16px",
+             border: `2px solid ${COLORS.FOG}`,
+             borderTopColor: COLORS.SOLDER_COPPER,
+             borderRadius: "50%",
+             animation: "spin 1s linear infinite"
+           }} />
+           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+           {status === "loading" ? "Loading Project..." : "Saving Changes..."}
+         </div>
+      )}
+
       {/* Dashboard View */}
       {view === "dashboard" && (
         <Dashboard
           onNewProject={() => setIsNaming(true)}
           onOpenProject={handleOpen}
           onSaveProject={handleSave}
+          onSaveProjectAs={handleSaveAs}
           onCloseProject={handleCloseProject}
           onSelectView={setView}
           onSelectMode={setMode}
           projectPath={projectPath}
+          status={status}
         />
       )}
 

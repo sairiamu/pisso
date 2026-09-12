@@ -7,9 +7,28 @@ use std::sync::Mutex;
 use serialport::SerialPort;
 use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
+use serde_json;
 
 pub struct AppState {
     pub serial_port: Mutex<Option<Box<dyn SerialPort>>>,
+}
+
+const SCHEMA_VERSION: u32 = 1;
+const PROJECT_METADATA_FILE: &str = "pisso.json";
+const DESIGN_DIR: &str = "design";
+const CIRCUIT_FILE: &str = "circuit.json";
+const SRC_DIR: &str = "src";
+const LIBRARIES_DIR: &str = "libraries";
+const ASSETS_DIR: &str = "assets";
+const BUILD_DIR: &str = "build";
+const SIMULATION_DIR: &str = "simulation";
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+struct PissoProjectMetadata {
+    schema_version: u32,
+    name: String,
+    active_file_index: u32,
 }
 
 /// GNU tools on Windows often choke on the Verbatim prefix (\\?\)
@@ -146,32 +165,97 @@ fn list_serial_ports() -> Result<Vec<SerialPortInfo>, String> {
     Ok(port_list)
 }
 
+fn diagnostic_error(err_type: &str, file: &str, message: &str) -> String {
+    serde_json::json!({
+        "type": err_type,
+        "file": file,
+        "message": message
+    }).to_string()
+}
+
+fn atomic_write(path: &Path, content: &str) -> Result<(), String> {
+    let parent = path.parent().ok_or_else(|| "Invalid parent directory".to_string())?;
+    let file_name = path.file_name().ok_or_else(|| "Invalid file name".to_string())?;
+    let temp_path = parent.join(format!(".{}.tmp", file_name.to_string_lossy()));
+
+    fs::write(&temp_path, content).map_err(|e| format!("Failed to write temporary file: {}", e))?;
+
+    if let Err(e) = fs::rename(&temp_path, path) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(format!("Failed to commit file change (rename): {}", e));
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 fn save_full_project(
     project_path: String,
     diagram_json: String,
     files: Vec<ProjectFile>,
 ) -> Result<(), String> {
-    let project_path = clean_path(project_path);
-    // 1. Save Design
-    let mut design_path = project_path.clone();
-    design_path.push("design");
-    if !design_path.exists() {
-        fs::create_dir_all(&design_path).map_err(|e| e.to_string())?;
-    }
-    design_path.push("diagram.json");
-    fs::write(design_path, diagram_json).map_err(|e| e.to_string())?;
+    let target_path = clean_path(project_path);
+    let parent = target_path.parent().ok_or("Invalid project parent")?;
+    let safe_name = target_path.file_name().ok_or("Invalid project name")?;
 
-    // 2. Save Code
-    let mut code_path = project_path.clone();
-    code_path.push("code");
-    if !code_path.exists() {
-        fs::create_dir_all(&code_path).map_err(|e| e.to_string())?;
+    let saving_path = parent.join(format!(".{}.saving", safe_name.to_string_lossy()));
+
+    if saving_path.exists() {
+        fs::remove_dir_all(&saving_path).map_err(|e| e.to_string())?;
     }
+
+    // 1. Create the new project structure in the saving directory
+    ensure_project_dirs(&saving_path)?;
+
+    // 2. Preserve directories like 'libraries' and 'assets' that are not part of the payload.
+    if target_path.exists() {
+        for entry in fs::read_dir(&target_path).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+
+            // Skip things we are about to overwrite or shouldn't copy
+            if name_str == DESIGN_DIR || name_str == SRC_DIR || name_str == BUILD_DIR || name_str == PROJECT_METADATA_FILE {
+                continue;
+            }
+
+            let dest = saving_path.join(name);
+            if entry.path().is_dir() {
+                copy_dir_recursive(&entry.path(), &dest).map_err(|e| e.to_string())?;
+            } else {
+                fs::copy(entry.path(), dest).map_err(|e| e.to_string())?;
+            }
+        }
+    }
+
+    // 3. Write new data to saving directory
+    fs::write(saving_path.join(DESIGN_DIR).join(CIRCUIT_FILE), diagram_json).map_err(|e| e.to_string())?;
+
+    let src_dir = saving_path.join(SRC_DIR);
     for file in files {
-        let mut file_path = code_path.clone();
-        file_path.push(file.name);
-        fs::write(file_path, file.content).map_err(|e| e.to_string())?;
+        fs::write(src_dir.join(file.name), file.content).map_err(|e| e.to_string())?;
+    }
+
+    // 4. Atomic Swap
+    let backup_path = parent.join(format!(".{}.old", safe_name.to_string_lossy()));
+    if backup_path.exists() {
+        fs::remove_dir_all(&backup_path).ok();
+    }
+
+    if target_path.exists() {
+        fs::rename(&target_path, &backup_path).map_err(|e| format!("Failed to backup current project: {}. Is a file open?", e))?;
+    }
+
+    if let Err(e) = fs::rename(&saving_path, &target_path) {
+        // Rollback
+        if backup_path.exists() {
+            let _ = fs::rename(&backup_path, &target_path);
+        }
+        return Err(format!("Failed to commit new project state: {}", e));
+    }
+
+    if backup_path.exists() {
+        let _ = fs::remove_dir_all(backup_path);
     }
 
     Ok(())
@@ -179,14 +263,14 @@ fn save_full_project(
 
 #[tauri::command]
 fn save_diagram(project_path: String, diagram_json: String) -> Result<(), String> {
-    let mut path = clean_path(project_path);
-    path.push("design");
-    if !path.exists() {
-        fs::create_dir_all(&path).map_err(|e| e.to_string())?;
-    }
-    path.push("diagram.json");
+    let path = clean_path(project_path);
+    ensure_project_dirs(&path)?;
 
-    fs::write(path, diagram_json).map_err(|e| e.to_string())
+    let mut circuit_path = path.clone();
+    circuit_path.push(DESIGN_DIR);
+    circuit_path.push(CIRCUIT_FILE);
+
+    atomic_write(&circuit_path, &diagram_json)
 }
 
 #[tauri::command]
@@ -283,6 +367,108 @@ fn sanitize_project_name(name: &str) -> String {
     if trimmed.is_empty() { "Untitled Project".to_string() } else { trimmed }
 }
 
+fn ensure_project_dirs(project_path: &Path) -> Result<(), String> {
+    let dirs = [DESIGN_DIR, SRC_DIR, LIBRARIES_DIR, ASSETS_DIR, BUILD_DIR, SIMULATION_DIR];
+    for dir in dirs {
+        let p = project_path.join(dir);
+        if !p.exists() {
+            fs::create_dir_all(p).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+fn migrate_project(project_path: &Path) -> Result<(), String> {
+    let new_meta_path = project_path.join(PROJECT_METADATA_FILE);
+    if new_meta_path.exists() {
+        let content = fs::read_to_string(&new_meta_path).map_err(|e| {
+            diagnostic_error("IO_ERROR", PROJECT_METADATA_FILE, &e.to_string())
+        })?;
+        match serde_json::from_str::<PissoProjectMetadata>(&content) {
+            Ok(meta) => {
+                if meta.schema_version > SCHEMA_VERSION {
+                    return Err(serde_json::json!({
+                        "type": "VERSION_MISMATCH",
+                        "file": PROJECT_METADATA_FILE,
+                        "current": meta.schema_version,
+                        "required": SCHEMA_VERSION,
+                        "message": format!("Project version {} is not supported (max {})", meta.schema_version, SCHEMA_VERSION)
+                    }).to_string());
+                }
+                return Ok(());
+            }
+            Err(e) => return Err(diagnostic_error("CORRUPTION", PROJECT_METADATA_FILE, &e.to_string())),
+        }
+    }
+
+    let old_meta_path = project_path.join("project.json");
+    let old_design_dir = project_path.join("design");
+    let old_diagram_file = old_design_dir.join("diagram.json");
+    let legacy_diagram_file = project_path.join("diagram.json");
+    let old_code_dir = project_path.join("code");
+
+    // If none of the old files exist, it's not a project to migrate
+    if !old_meta_path.exists() && !old_diagram_file.exists() && !legacy_diagram_file.exists() && !old_code_dir.exists() {
+        return Ok(());
+    }
+
+    ensure_project_dirs(project_path)?;
+
+    // Move Design
+    if old_diagram_file.exists() {
+        fs::rename(&old_diagram_file, project_path.join(DESIGN_DIR).join(CIRCUIT_FILE)).map_err(|e| {
+             diagnostic_error("MIGRATION_FAILED", "diagram.json", &e.to_string())
+        })?;
+    } else if legacy_diagram_file.exists() {
+        fs::rename(&legacy_diagram_file, project_path.join(DESIGN_DIR).join(CIRCUIT_FILE)).map_err(|e| {
+             diagnostic_error("MIGRATION_FAILED", "diagram.json", &e.to_string())
+        })?;
+    }
+
+    // Move Code to src
+    if old_code_dir.exists() {
+        // Remove empty src/ created by ensure_project_dirs so we can rename
+        let new_src = project_path.join(SRC_DIR);
+        if new_src.exists() {
+            fs::remove_dir(new_src).ok();
+        }
+        fs::rename(&old_code_dir, project_path.join(SRC_DIR)).map_err(|e| {
+             diagnostic_error("MIGRATION_FAILED", "code/", &e.to_string())
+        })?;
+    }
+
+    // Metadata
+    let mut name = project_path.file_name().unwrap_or_default().to_string_lossy().to_string();
+    let mut active_file_index = 0;
+
+    if old_meta_path.exists() {
+        let content = fs::read_to_string(&old_meta_path).ok();
+        if let Some(c) = content {
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&c) {
+                if let Some(n) = val.get("name").and_then(|v| v.as_str()) {
+                    name = n.to_string();
+                }
+                if let Some(i) = val.get("activeFileIndex").and_then(|v| v.as_u64()) {
+                    active_file_index = i as u32;
+                }
+            }
+        }
+        fs::remove_file(old_meta_path).ok();
+    }
+
+    let meta = PissoProjectMetadata {
+        schema_version: SCHEMA_VERSION,
+        name,
+        active_file_index,
+    };
+    let meta_json = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
+    fs::write(new_meta_path, meta_json).map_err(|e| {
+         diagnostic_error("MIGRATION_FAILED", PROJECT_METADATA_FILE, &e.to_string())
+    })?;
+
+    Ok(())
+}
+
 #[tauri::command]
 fn create_new_project(app_handle: tauri::AppHandle, name: String) -> Result<String, String> {
     let mut base = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -299,22 +485,24 @@ fn create_new_project(app_handle: tauri::AppHandle, name: String) -> Result<Stri
         suffix += 1;
     }
 
-    fs::create_dir_all(candidate.join("design")).map_err(|e| e.to_string())?;
-    fs::create_dir_all(candidate.join("code")).map_err(|e| e.to_string())?;
+    ensure_project_dirs(&candidate)?;
 
     fs::write(
-        candidate.join("design").join("diagram.json"),
+        candidate.join(DESIGN_DIR).join(CIRCUIT_FILE),
         r#"{"version":1,"parts":[],"connections":[]}"#,
     ).map_err(|e| e.to_string())?;
 
     let default_sketch = "#include <Arduino.h>\n\nvoid setup() {\n  pinMode(LED_BUILTIN, OUTPUT);\n}\n\nvoid loop() {\n  digitalWrite(LED_BUILTIN, HIGH);\n  delay(1000);\n  digitalWrite(LED_BUILTIN, LOW);\n  delay(1000);\n}\n";
-    fs::write(candidate.join("code").join("sketch.ino"), default_sketch)
+    fs::write(candidate.join(SRC_DIR).join("sketch.ino"), default_sketch)
         .map_err(|e| e.to_string())?;
 
-    fs::write(
-        candidate.join("project.json"),
-        format!(r#"{{"activeFileIndex":0,"name":"{}"}}"#, safe_name.replace('"', "\\\"")),
-    ).map_err(|e| e.to_string())?;
+    let meta = PissoProjectMetadata {
+        schema_version: SCHEMA_VERSION,
+        name: safe_name,
+        active_file_index: 0,
+    };
+    let meta_json = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
+    fs::write(candidate.join(PROJECT_METADATA_FILE), meta_json).map_err(|e| e.to_string())?;
 
     Ok(clean_path(candidate).to_string_lossy().to_string())
 }
@@ -337,17 +525,24 @@ fn list_projects(app_handle: tauri::AppHandle) -> Result<Vec<String>, String> {
             let p = entry.path();
             if p.is_dir() {
                 let mut diag = p.clone();
-                diag.push("design");
-                diag.push("diagram.json");
+                diag.push(DESIGN_DIR);
+                diag.push(CIRCUIT_FILE);
 
                 let mut meta = p.clone();
-                meta.push("project.json");
+                meta.push(PROJECT_METADATA_FILE);
 
-                // Also check for legacy projects in root
+                // Check for legacy structures as well to include them in the list
+                let mut old_diag = p.clone();
+                old_diag.push("design");
+                old_diag.push("diagram.json");
+
+                let mut old_meta = p.clone();
+                old_meta.push("project.json");
+
                 let mut legacy = p.clone();
                 legacy.push("diagram.json");
 
-                if diag.exists() || meta.exists() || legacy.exists() {
+                if diag.exists() || meta.exists() || old_diag.exists() || old_meta.exists() || legacy.exists() {
                     projects.push(clean_path(p).to_string_lossy().to_string());
                 }
             }
@@ -384,14 +579,14 @@ struct ProjectFile {
 #[tauri::command]
 fn save_project_files(project_path: String, files: Vec<ProjectFile>) -> Result<(), String> {
     let mut path = clean_path(project_path);
-    path.push("code");
+    path.push(SRC_DIR);
     if !path.exists() {
         fs::create_dir_all(&path).map_err(|e| e.to_string())?;
     }
     for file in files {
         let mut file_path = path.clone();
-        file_path.push(file.name);
-        fs::write(file_path, file.content).map_err(|e| e.to_string())?;
+        file_path.push(&file.name);
+        atomic_write(&file_path, &file.content)?;
     }
     Ok(())
 }
@@ -399,16 +594,18 @@ fn save_project_files(project_path: String, files: Vec<ProjectFile>) -> Result<(
 #[tauri::command]
 fn load_project_files(project_path: String) -> Result<Vec<ProjectFile>, String> {
     let project_path = clean_path(project_path);
+
+    // Attempt migration if needed
+    let _ = migrate_project(&project_path);
+
     let mut path = project_path.clone();
-    path.push("code");
+    path.push(SRC_DIR);
 
-    let load_from = if path.exists() {
-        path
-    } else {
-        project_path
-    };
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
 
-    let entries = fs::read_dir(load_from).map_err(|e| e.to_string())?;
+    let entries = fs::read_dir(path).map_err(|e| e.to_string())?;
     let mut files = Vec::new();
     for entry in entries {
         let entry = entry.map_err(|e| e.to_string())?;
@@ -430,42 +627,70 @@ fn load_project_files(project_path: String) -> Result<Vec<ProjectFile>, String> 
 
 #[tauri::command]
 fn save_project_metadata(project_path: String, metadata_json: String) -> Result<(), String> {
-    let mut path = clean_path(project_path);
-    if !path.exists() {
-        fs::create_dir_all(&path).map_err(|e| e.to_string())?;
-    }
-    path.push("project.json");
+    let path = clean_path(project_path);
+    ensure_project_dirs(&path)?;
 
-    fs::write(path, metadata_json).map_err(|e| e.to_string())
+    let mut meta_path = path.clone();
+    meta_path.push(PROJECT_METADATA_FILE);
+
+    atomic_write(&meta_path, &metadata_json)
 }
 
 #[tauri::command]
 fn load_project_metadata(project_path: String) -> Result<String, String> {
-    let mut path = clean_path(project_path);
-    path.push("project.json");
+    let project_path = clean_path(project_path);
+
+    // Attempt migration
+    if let Err(e) = migrate_project(&project_path) {
+        return Err(e);
+    }
+
+    let mut path = project_path.clone();
+    path.push(PROJECT_METADATA_FILE);
 
     if !path.exists() {
         return Ok("{}".to_string());
     }
 
-    fs::read_to_string(path).map_err(|e| e.to_string())
+    let content = fs::read_to_string(&path).map_err(|e| {
+         diagnostic_error("IO_ERROR", PROJECT_METADATA_FILE, &e.to_string())
+    })?;
+
+    // Basic validation
+    if let Err(e) = serde_json::from_str::<serde_json::Value>(&content) {
+        return Err(diagnostic_error("CORRUPTION", PROJECT_METADATA_FILE, &e.to_string()));
+    }
+
+    Ok(content)
 }
 
 #[tauri::command]
 fn load_diagram(project_path: String) -> Result<String, String> {
     let project_path = clean_path(project_path);
-    let mut path = project_path.clone();
-    path.push("design");
-    path.push("diagram.json");
 
-    if path.exists() {
-        fs::read_to_string(path).map_err(|e| e.to_string())
-    } else {
-        // Fallback to root for existing projects
-        let mut old_path = project_path;
-        old_path.push("diagram.json");
-        fs::read_to_string(old_path).map_err(|e| e.to_string())
+    // Attempt migration
+    if let Err(e) = migrate_project(&project_path) {
+        return Err(e);
     }
+
+    let mut path = project_path.clone();
+    path.push(DESIGN_DIR);
+    path.push(CIRCUIT_FILE);
+
+    if !path.exists() {
+        return Err(diagnostic_error("MISSING_FILE", CIRCUIT_FILE, "Circuit diagram file not found"));
+    }
+
+    let content = fs::read_to_string(&path).map_err(|e| {
+        diagnostic_error("IO_ERROR", CIRCUIT_FILE, &e.to_string())
+    })?;
+
+    // Validate JSON
+    if let Err(e) = serde_json::from_str::<serde_json::Value>(&content) {
+        return Err(diagnostic_error("CORRUPTION", CIRCUIT_FILE, &e.to_string()));
+    }
+
+    Ok(content)
 }
 
 #[derive(serde::Serialize)]
@@ -503,10 +728,17 @@ async fn compile_sketch(
         app_handle.path().resolve("resources/arduino-libraries", BaseDirectory::Resource)
             .map_err(|e| format!("Failed to resolve arduino-libraries resource: {}", e))?
     );
-    let library_search_roots = vec![bundled_libraries_dir, user_libraries_dir];
 
     let sketch_path = clean_path(sketch_path);
     let project_dir = sketch_path.parent().ok_or("Invalid sketch path")?;
+    let project_root = project_dir.parent().ok_or("Invalid project root")?;
+    let project_libraries_dir = project_root.join(LIBRARIES_DIR);
+
+    let mut library_search_roots = vec![bundled_libraries_dir, user_libraries_dir];
+    if project_libraries_dir.exists() {
+        library_search_roots.insert(0, project_libraries_dir);
+    }
+
     let toolchain_bin = avr_toolchain.join("bin");
 
     #[cfg(windows)]
@@ -1168,6 +1400,44 @@ fn write_to_serial(state: tauri::State<AppState>, data: String) -> Result<(), St
     Ok(())
 }
 
+#[tauri::command]
+fn rename_project(project_path: String, new_name: String) -> Result<String, String> {
+    let old_path = clean_path(project_path);
+    let parent = old_path.parent().ok_or("Invalid project path")?;
+    let safe_name = sanitize_project_name(&new_name);
+    let new_path = parent.join(&safe_name);
+
+    if new_path.exists() {
+        return Err("A project with that name already exists".into());
+    }
+
+    fs::rename(&old_path, &new_path).map_err(|e| e.to_string())?;
+
+    // Update metadata name if it exists
+    let meta_path = new_path.join(PROJECT_METADATA_FILE);
+    if meta_path.exists() {
+        if let Ok(content) = fs::read_to_string(&meta_path) {
+            if let Ok(mut meta) = serde_json::from_str::<serde_json::Value>(&content) {
+                meta["name"] = serde_json::Value::String(safe_name);
+                if let Ok(new_content) = serde_json::to_string_pretty(&meta) {
+                    let _ = fs::write(meta_path, new_content);
+                }
+            }
+        }
+    }
+
+    Ok(clean_path(new_path).to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn delete_project(project_path: String) -> Result<(), String> {
+    let path = clean_path(project_path);
+    if path.exists() {
+        fs::remove_dir_all(path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1202,7 +1472,9 @@ pub fn run() {
             get_library_catalog,
             install_bundled_library,
             remove_library,
-            install_library_from_zip
+            install_library_from_zip,
+            rename_project,
+            delete_project
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

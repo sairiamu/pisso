@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { FolderOpen, CircuitBoard } from "lucide-react";
 import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
-import { ProjectService } from "../application/project-service";
+import { ProjectManager } from "../application/ProjectManager";
 
 interface SavedViewProps {
   onOpenProject: (path?: string) => void;
@@ -16,8 +16,8 @@ export const SavedView: React.FC<SavedViewProps> = ({ onOpenProject }) => {
     const fetchProjects = async () => {
       try {
         const [recent, scanned] = await Promise.all([
-          ProjectService.getRecentProjects().catch(() => []),
-          ProjectService.listProjects().catch(() => []),
+          ProjectManager.getRecentProjects().catch(() => []),
+          ProjectManager.listProjects().catch(() => []),
         ]);
         const merged = Array.from(new Set([...recent, ...scanned]));
         setProjects(merged);

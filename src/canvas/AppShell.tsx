@@ -26,6 +26,7 @@ import { PortSelector } from "./PortSelector";
 import { BoardSelector } from "./BoardSelector";
 import { UploadButton } from "./UploadButton";
 import { BoardInfo } from "../domain/models";
+import { ProjectStatus } from "../application/ProjectManager";
 
 import { FileEntry } from "../App";
 
@@ -46,13 +47,13 @@ interface AppShellProps {
   isSimulating?: boolean;
   onSimulateToggle?: (simulating: boolean) => void;
   projectPath?: string | null;
-  isProjectActive?: boolean;
   files: FileEntry[];
   onCompileSuccess?: (hex: string) => void;
   boards: BoardInfo[];
   selectedBoardId: string | null;
   onSelectBoard: (id: string | null) => void;
   setDebugStatus?: (status: string) => void;
+  status: ProjectStatus;
 }
 
 /**
@@ -72,13 +73,13 @@ export const AppShell: React.FC<AppShellProps> = ({
   isSimulating,
   onSimulateToggle,
   projectPath,
-  isProjectActive,
   files,
   onCompileSuccess,
   boards,
   selectedBoardId,
   onSelectBoard,
   setDebugStatus,
+  status,
 }) => {
   const [bottomPanel, setBottomPanel] = useState<'terminal' | 'graph' | null>(null);
   const [selectedPort, setSelectedPort] = useState<string | null>(null);
@@ -300,7 +301,7 @@ export const AppShell: React.FC<AppShellProps> = ({
               <Plus size={22} />
             </button>
 
-            {isProjectActive && (
+            {status !== "closed" && (
               <button
                 onClick={() => onViewChange("workspace")}
                 title="Studio (Design & Code)"

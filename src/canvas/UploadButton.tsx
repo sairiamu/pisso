@@ -5,7 +5,7 @@ import { TYPOGRAPHY } from "../CONSTANTS/typography";
 import { writeSketch } from "../domain/sketch-generator";
 import { FileEntry } from "../App";
 import { BoardInfo } from "../domain/models";
-import { ProjectService } from "../application/project-service";
+import { ProjectManager } from "../application/ProjectManager";
 import { CompilerService } from "../application/compiler-service";
 
 interface UploadButtonProps {
@@ -69,11 +69,11 @@ export const UploadButton: React.FC<UploadButtonProps> = ({
     try {
       let activePath = projectPath;
       if (!activePath) {
-        activePath = await ProjectService.getPlaygroundPath();
+        activePath = await ProjectManager.getPlaygroundPath();
       }
 
       const mainSketch = files.find(f => f.name.endsWith(".ino")) || files[0];
-      const sketchPath = `${activePath}/code/${mainSketch.name}`;
+      const sketchPath = `${activePath}/src/${mainSketch.name}`;
       // compile_sketch generates .hex in the same directory as the sketch by replacing the extension.
       const hexPath = sketchPath.replace(/\.[^/.]+$/, "") + ".hex";
 

@@ -69,5 +69,13 @@ export const ProjectService = {
 
   async listProjects(): Promise<string[]> {
     return await ProjectApi.listProjects();
+  },
+
+  async renameProject(projectPath: string, newName: string): Promise<string> {
+    return await ProjectApi.renameProject(projectPath, newName);
+  },
+
+  async deleteProject(projectPath: string): Promise<void> {
+    await ProjectApi.deleteProject(projectPath);
   }
 };

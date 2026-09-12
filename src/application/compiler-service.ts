@@ -13,7 +13,7 @@ export const CompilerService = {
     await ProjectService.saveProjectFiles(projectPath, files);
 
     // 2. Invoke the compile command
-    const sketchPath = `${projectPath}/code/${mainSketchName}`;
+    const sketchPath = `${projectPath}/src/${mainSketchName}`;
     return await CompilerApi.compileSketch(sketchPath, boardFqbn);
   },
 
