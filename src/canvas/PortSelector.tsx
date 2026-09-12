@@ -1,15 +1,9 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { RefreshCw, Cpu } from "lucide-react";
 import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
-
-interface SerialPort {
-  port_name: string;
-  vendor_id?: number;
-  product_id?: number;
-  is_arduino: boolean;
-}
+import { SerialService } from "../application/serial-service";
+import { SerialPortInfo } from "../infrastructure/tauri/serial-api";
 
 interface PortSelectorProps {
   projectPath: string | null;
@@ -17,14 +11,14 @@ interface PortSelectorProps {
 }
 
 export const PortSelector: React.FC<PortSelectorProps> = ({ projectPath, onPortSelect }) => {
-  const [ports, setPorts] = useState<SerialPort[]>([]);
+  const [ports, setPorts] = useState<SerialPortInfo[]>([]);
   const [selectedPort, setSelectedPort] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const fetchPorts = useCallback(async () => {
     setIsLoading(true);
     try {
-      const availablePorts = await invoke<SerialPort[]>("list_serial_ports");
+      const availablePorts = await SerialService.listPorts();
       setPorts(availablePorts);
 
       // If we have a selected port that's no longer available, keep it in UI but marked?

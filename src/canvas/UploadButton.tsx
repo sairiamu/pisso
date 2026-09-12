@@ -1,11 +1,12 @@
 import React, { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { Upload } from "lucide-react";
 import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
-import { writeSketch } from "../diagram/sketch";
+import { writeSketch } from "../domain/sketch-generator";
 import { FileEntry } from "../App";
-import { BoardInfo } from "./CanvasShell";
+import { BoardInfo } from "../domain/models";
+import { ProjectService } from "../application/project-service";
+import { CompilerService } from "../application/compiler-service";
 
 interface UploadButtonProps {
   projectPath: string | null;
@@ -68,7 +69,7 @@ export const UploadButton: React.FC<UploadButtonProps> = ({
     try {
       let activePath = projectPath;
       if (!activePath) {
-        activePath = await invoke<string>("get_playground_path");
+        activePath = await ProjectService.getPlaygroundPath();
       }
 
       const mainSketch = files.find(f => f.name.endsWith(".ino")) || files[0];
@@ -80,23 +81,17 @@ export const UploadButton: React.FC<UploadButtonProps> = ({
       if (!hasHex) {
         onOutput?.("No compiled hex found. Compiling project first...");
 
-        // Save all project files
         const projectFiles = files.map(file => ({
             name: file.name,
             content: file.name.endsWith(".ino") ? writeSketch(file.content) : file.content
         }));
-        await invoke("save_project_files", { projectPath: activePath, files: projectFiles });
 
-        interface CompileResult {
-          hex: string;
-          flash_used: number;
-          ram_used: number;
-        }
-
-        const result = await invoke<CompileResult>("compile_sketch", {
-          sketchPath,
-          boardFqbn: board.fqbn,
-        });
+        const result = await CompilerService.compile(
+          activePath,
+          projectFiles,
+          board.fqbn,
+          mainSketch.name
+        );
 
         onOutput?.(`Compilation successful. (Flash: ${result.flash_used} bytes, RAM: ${result.ram_used} bytes)`);
         onCompileSuccess?.(result.hex);
@@ -104,11 +99,11 @@ export const UploadButton: React.FC<UploadButtonProps> = ({
 
       // 2. Upload
       onOutput?.(`Uploading to ${selectedPort}...`);
-      const uploadResult = await invoke<string>("upload_hex", {
+      const uploadResult = await CompilerService.upload(
         hexPath,
-        port: selectedPort,
-        boardFqbn: board.fqbn,
-      });
+        selectedPort,
+        board.fqbn
+      );
 
       onOutput?.(`VERIFICATION SUCCESS: ${uploadResult}`);
       onOutput?.("Your board should be running the new code.");

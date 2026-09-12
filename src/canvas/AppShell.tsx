@@ -1,20 +1,31 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
-import { LayoutDashboard, FolderHeart, Sparkles, GraduationCap, User, Save, CircuitBoard, Plus, Package, Beaker } from "lucide-react";
+import {
+  LayoutDashboard,
+  FolderHeart,
+  Sparkles,
+  GraduationCap,
+  User,
+  Save,
+  CircuitBoard,
+  Plus,
+  Package,
+  Beaker
+} from "lucide-react";
 import { Panel } from "../components/Panel";
+import { EventApi } from "../infrastructure/tauri/event-api";
+import { SerialService } from "../application/serial-service";
 import { COLORS } from "../CONSTANTS/colors";
 import { PANEL } from "../CONSTANTS/panel";
 import { ModeSwitcher, AppMode } from "./ModeSwitcher";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
-import { SimulationEngine } from "../simulator/engine";
+import { SimulationService } from "../application/simulation-service";
 import { useSimulation } from "../simulator/SimulationContext";
 import { TerminalPanel } from "./TerminalPanel";
 import { GraphPanel } from "./GraphPanel";
 import { PortSelector } from "./PortSelector";
 import { BoardSelector } from "./BoardSelector";
 import { UploadButton } from "./UploadButton";
-import { BoardInfo } from "./CanvasShell";
+import { BoardInfo } from "../domain/models";
 
 import { FileEntry } from "../App";
 
@@ -73,7 +84,6 @@ export const AppShell: React.FC<AppShellProps> = ({
   const [selectedPort, setSelectedPort] = useState<string | null>(null);
   const [serialHeight, setSerialHeight] = useState(200);
   const [isResizing, setIsResizing] = useState(false);
-  const engineRef = useRef<SimulationEngine | null>(null);
   const {
     setPinState,
     resetPinStates,
@@ -91,7 +101,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   useEffect(() => {
     let unlisten: (() => void) | null = null;
 
-    listen<string>("upload-progress", (event) => {
+    EventApi.listen<string>("upload-progress", (event) => {
       appendBuildOutput(event.payload);
     }).then(u => { unlisten = u; });
 
@@ -104,7 +114,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   useEffect(() => {
     let unlisten: (() => void) | null = null;
 
-    listen<string>("serial-data", (event) => {
+    EventApi.listen<string>("serial-data", (event) => {
       if (serialSource === 'hardware') {
         appendSerialOutput(event.payload);
       }
@@ -118,7 +128,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   // Close hardware serial on unmount
   useEffect(() => {
     return () => {
-      invoke("close_serial").catch(() => {});
+      SerialService.closePort().catch(() => {});
     };
   }, []);
 
@@ -133,13 +143,9 @@ export const AppShell: React.FC<AppShellProps> = ({
   useEffect(() => {
     setWriteSerialHandler((data: string) => {
       if (serialSource === 'simulation') {
-        if (engineRef.current) {
-          for (let i = 0; i < data.length; i++) {
-            engineRef.current.serialWrite(data.charCodeAt(i));
-          }
-        }
+        SimulationService.writeSerial(data);
       } else {
-        invoke("write_to_serial", { data }).catch(err => {
+        SerialService.write(data).catch(err => {
           console.error("Failed to write to hardware serial:", err);
         });
       }
@@ -171,20 +177,16 @@ export const AppShell: React.FC<AppShellProps> = ({
   }, [isResizing, handleMouseMove, handleMouseUp]);
 
   useEffect(() => {
-    if (!isSimulating && engineRef.current) {
-      engineRef.current.pause();
-      engineRef.current = null;
+    if (!isSimulating) {
+      SimulationService.stop();
       resetPinStates();
       setSerialConnected(false);
     }
 
     return () => {
-      if (engineRef.current) {
-        engineRef.current.pause();
-        engineRef.current = null;
-        resetPinStates();
-        setSerialConnected(false);
-      }
+      SimulationService.stop();
+      resetPinStates();
+      setSerialConnected(false);
     };
   }, [isSimulating, resetPinStates, setSerialConnected]);
 
@@ -202,7 +204,7 @@ export const AppShell: React.FC<AppShellProps> = ({
     // Stop hardware serial before starting simulation
     if (serialSource === 'hardware') {
       try {
-        await invoke("close_serial");
+        await SerialService.closePort();
       } catch (err) {
         console.error("Failed to close hardware serial:", err);
       }
@@ -211,15 +213,11 @@ export const AppShell: React.FC<AppShellProps> = ({
     setSerialSource('simulation');
 
     try {
-      const engine = SimulationEngine.fromHex(lastHex);
-      engine.onPinChange = (pin, state) => {
-        setPinState(pin, state);
-      };
-      engine.onUartByte = (byte) => {
-        appendSerialOutput(String.fromCharCode(byte));
-      };
-      engineRef.current = engine;
-      engine.start();
+      SimulationService.start(
+        lastHex,
+        (pin, state) => setPinState(pin, state),
+        (byte) => appendSerialOutput(String.fromCharCode(byte))
+      );
       setSerialConnected(true);
       onSimulateToggle?.(true);
     } catch (err) {
@@ -239,7 +237,7 @@ export const AppShell: React.FC<AppShellProps> = ({
     setSerialSource('hardware');
     if (selectedPort) {
       try {
-        await invoke("open_serial", { portName: selectedPort, baudRate: 115200 });
+        await SerialService.openPort(selectedPort, 115200);
         setSerialConnected(true);
       } catch (err) {
         console.error("Failed to open hardware serial:", err);

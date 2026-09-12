@@ -9,9 +9,12 @@ if (!("Buffer" in globalThis)) {
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { SimulationProvider } from "./simulator/SimulationContext";
+import { CircuitProvider } from "./domain/CircuitContext";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <SimulationProvider>
-    <App />
+    <CircuitProvider>
+      <App />
+    </CircuitProvider>
   </SimulationProvider>
 );

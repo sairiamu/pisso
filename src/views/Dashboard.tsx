@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Plus, FolderOpen, Clock, Folder, ChevronDown, CircuitBoard } from "lucide-react";
 import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
-import { getRecentProjects } from "../diagram";
+import { ProjectService } from "../application/project-service";
 
 interface DashboardProps {
   onNewProject: () => void;
@@ -27,7 +27,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [recentProjects, setRecentProjects] = useState<string[]>([]);
 
   useEffect(() => {
-    getRecentProjects().then(setRecentProjects).catch(() => setRecentProjects([]));
+    ProjectService.getRecentProjects().then(setRecentProjects).catch(() => setRecentProjects([]));
   }, []);
 
   const getProjectName = (path: string) => {

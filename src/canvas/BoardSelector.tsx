@@ -2,7 +2,7 @@ import React from "react";
 import { Cpu } from "lucide-react";
 import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
-import { BoardInfo } from "./CanvasShell";
+import { BoardInfo } from "../domain/models";
 
 interface BoardSelectorProps {
   boards: BoardInfo[];

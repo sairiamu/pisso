@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { BaseEdge, EdgeProps, getSmoothStepPath, useNodes, useEdges, useReactFlow } from "@xyflow/react";
 import { COLORS } from "../CONSTANTS/colors";
-import { routeOrthogonal, Rect, Direction } from "../netlist/router";
+import { routeOrthogonal, Rect, Direction } from "../domain/wire-router";
 import { useRouteCache } from "./RouteCache";
 import { useWireActions } from "./WireActions";
 

@@ -1,28 +1,9 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { Package, Trash2, Search, FileArchive, Info, Check, Globe, RefreshCw } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
-import { fetch } from "@tauri-apps/plugin-http";
-import { writeFile, BaseDirectory } from "@tauri-apps/plugin-fs";
-import { join, tempDir } from "@tauri-apps/api/path";
+import { LibraryService, OnlineLibraryEntry } from "../application/library-service";
+import { LibraryCatalogEntry } from "../infrastructure/tauri/library-api";
 import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
-
-interface LibraryCatalogEntry {
-  name: string;
-  author: string;
-  version: string;
-  description: string;
-  bundled: boolean;
-}
-
-interface OnlineLibraryEntry {
-  name: string;
-  author: string;
-  version: string;
-  description: string;
-  url: string;
-}
 
 export const LibrariesView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"installed" | "available">("installed");
@@ -39,8 +20,8 @@ export const LibrariesView: React.FC = () => {
     setLoading(true);
     try {
       const [installed, fullCatalog] = await Promise.all([
-        invoke<string[]>("list_installed_libraries"),
-        invoke<LibraryCatalogEntry[]>("get_library_catalog"),
+        LibraryService.getInstalledLibraries(),
+        LibraryService.getLibraryCatalog(),
       ]);
       setInstalledLibs(installed);
       setCatalog(fullCatalog);
@@ -54,30 +35,8 @@ export const LibrariesView: React.FC = () => {
   const fetchOnlineIndex = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const response = await fetch("https://downloads.arduino.cc/libraries/library_index.json");
-      if (!response.ok) throw new Error("Failed to reach Arduino registry");
-      const data = await response.json();
-
-      // The index contains multiple versions, we keep only the latest per library name.
-      // The entries are usually sorted, but we'll explicitly reduce.
-      const latestLibs: Record<string, OnlineLibraryEntry> = {};
-
-      if (data.libraries && Array.isArray(data.libraries)) {
-        for (const lib of data.libraries) {
-          const existing = latestLibs[lib.name];
-          if (!existing || compareVersions(lib.version, existing.version) > 0) {
-            latestLibs[lib.name] = {
-              name: lib.name,
-              author: lib.author || "Unknown",
-              version: lib.version,
-              description: lib.sentence || lib.description || "",
-              url: lib.url
-            };
-          }
-        }
-      }
-
-      setOnlineCatalog(Object.values(latestLibs));
+      const data = await LibraryService.fetchOnlineIndex();
+      setOnlineCatalog(data);
       setIsOnline(true);
     } catch (err) {
       console.error("Online index fetch failed:", err);
@@ -86,19 +45,6 @@ export const LibrariesView: React.FC = () => {
       setIsRefreshing(false);
     }
   }, []);
-
-  // Simple version comparison
-  const compareVersions = (v1: string, v2: string) => {
-    const parts1 = v1.split('.').map(Number);
-    const parts2 = v2.split('.').map(Number);
-    for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
-      const p1 = parts1[i] || 0;
-      const p2 = parts2[i] || 0;
-      if (p1 > p2) return 1;
-      if (p1 < p2) return -1;
-    }
-    return 0;
-  };
 
   useEffect(() => {
     fetchLibraries();
@@ -112,7 +58,7 @@ export const LibrariesView: React.FC = () => {
 
   const handleRemove = async (name: string) => {
     try {
-      await invoke("remove_library", { name });
+      await LibraryService.removeLibrary(name);
       showMessage(`Library "${name}" removed.`);
       fetchLibraries();
     } catch (err) {
@@ -122,7 +68,7 @@ export const LibrariesView: React.FC = () => {
 
   const handleInstallBundled = async (name: string) => {
     try {
-      await invoke("install_bundled_library", { name });
+      await LibraryService.installBundledLibrary(name);
       showMessage(`Library "${name}" installed.`);
       fetchLibraries();
     } catch (err) {
@@ -132,14 +78,8 @@ export const LibrariesView: React.FC = () => {
 
   const handleImportZip = async () => {
     try {
-      const selected = await open({
-        filters: [{ name: "Library", extensions: ["zip"] }],
-        multiple: false,
-        title: "Import Library from .zip"
-      });
-
-      if (selected && typeof selected === 'string') {
-        const libName = await invoke<string>("install_library_from_zip", { zipPath: selected });
+      const libName = await LibraryService.importLibraryFromZip();
+      if (libName) {
         showMessage(`Library "${libName}" imported successfully.`);
         fetchLibraries();
         setActiveTab("installed");
@@ -152,17 +92,7 @@ export const LibrariesView: React.FC = () => {
   const handleInstallOnline = async (entry: OnlineLibraryEntry) => {
     try {
       showMessage(`Downloading ${entry.name}...`);
-      const response = await fetch(entry.url);
-      if (!response.ok) throw new Error("Download failed");
-
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      const fileName = `pisso-download-${Date.now()}.zip`;
-
-      await writeFile(fileName, bytes, { baseDir: BaseDirectory.Temp });
-      const tDir = await tempDir();
-      const fullPath = await join(tDir, fileName);
-
-      const libName = await invoke<string>("install_library_from_zip", { zipPath: fullPath });
+      const libName = await LibraryService.downloadAndInstallLibrary(entry);
       showMessage(`Library "${libName}" installed successfully.`);
       fetchLibraries();
     } catch (err) {

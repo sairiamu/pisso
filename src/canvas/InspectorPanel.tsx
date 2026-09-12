@@ -2,16 +2,13 @@ import React from "react";
 import { RotateCw, Trash2 } from "lucide-react";
 import { Panel } from "../components/Panel";
 import { COLORS } from "../CONSTANTS/colors";
-import { PartInstance } from "../diagram/types";
+import { ComponentInstance } from "../domain/models";
 import { PARTS_REGISTRY } from "../parts/registry";
+import { useCircuit } from "../domain/CircuitContext";
 
 interface InspectorPanelProps {
-  selectedPart: PartInstance | null;
+  selectedPart: ComponentInstance | null;
   selectedEdge?: { id: string; color?: string; thickness?: number; tracked?: boolean } | null;
-  onUpdateAttributes: (id: string, attrs: Record<string, any>) => void;
-  onUpdateEdgeStyle: (id: string, changes: Partial<{ color: string; thickness: number; tracked: boolean }>) => void;
-  onRotate: () => void;
-  onDelete: () => void;
 }
 
 const ATTRIBUTE_METADATA: Record<string, { label: string; type: 'text' | 'number' | 'color' | 'boolean'; key: string }[]> = {
@@ -39,11 +36,15 @@ const ATTRIBUTE_METADATA: Record<string, { label: string; type: 'text' | 'number
 export const InspectorPanel: React.FC<InspectorPanelProps> = ({
   selectedPart,
   selectedEdge,
-  onUpdateAttributes,
-  onUpdateEdgeStyle,
-  onRotate,
-  onDelete,
 }) => {
+  const {
+    updateComponent,
+    updateConnectionStyle,
+    rotateComponent,
+    removeComponent,
+    disconnectPins
+  } = useCircuit();
+
   if (!selectedPart && !selectedEdge) {
     return (
       <Panel
@@ -112,7 +113,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
 
         <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
           <button
-            onClick={onDelete}
+            onClick={() => disconnectPins(selectedEdge.id)}
             title="Delete wire"
             style={{
               flex: 1,
@@ -139,7 +140,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
               <input
                 type="color"
                 value={selectedEdge.color || COLORS.TRACE_GREEN}
-                onChange={(e) => onUpdateEdgeStyle(selectedEdge.id, { color: e.target.value })}
+                onChange={(e) => updateConnectionStyle(selectedEdge.id, { color: e.target.value })}
                 style={{
                   width: '32px',
                   height: '32px',
@@ -152,7 +153,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
               <input
                 type="text"
                 value={selectedEdge.color || COLORS.TRACE_GREEN}
-                onChange={(e) => onUpdateEdgeStyle(selectedEdge.id, { color: e.target.value })}
+                onChange={(e) => updateConnectionStyle(selectedEdge.id, { color: e.target.value })}
                 style={{
                   flex: 1,
                   padding: "6px 8px",
@@ -178,7 +179,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
               max="8"
               step="1"
               value={selectedEdge.thickness || 3}
-              onChange={(e) => onUpdateEdgeStyle(selectedEdge.id, { thickness: parseInt(e.target.value) })}
+              onChange={(e) => updateConnectionStyle(selectedEdge.id, { thickness: parseInt(e.target.value) })}
               style={{ width: "100%", cursor: "pointer" }}
             />
           </div>
@@ -188,7 +189,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
               type="checkbox"
               id="tracked-toggle"
               checked={!!selectedEdge.tracked}
-              onChange={(e) => onUpdateEdgeStyle(selectedEdge.id, { tracked: e.target.checked })}
+              onChange={(e) => updateConnectionStyle(selectedEdge.id, { tracked: e.target.checked })}
               style={{ cursor: 'pointer' }}
             />
             <label htmlFor="tracked-toggle" style={{ fontSize: "0.8rem", color: COLORS.FOG, cursor: 'pointer' }}>
@@ -200,14 +201,14 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
     );
   }
 
-  const definition = PARTS_REGISTRY.get(selectedPart!.type);
-  const label = definition?.label || selectedPart!.type;
-  const attributes = ATTRIBUTE_METADATA[selectedPart!.type] || [];
+  const definition = PARTS_REGISTRY.get(selectedPart!.definitionId);
+  const label = definition?.label || selectedPart!.definitionId;
+  const attributes = ATTRIBUTE_METADATA[selectedPart!.definitionId] || [];
 
   const handleAttrChange = (key: string, value: any) => {
     if (selectedPart) {
-      onUpdateAttributes(selectedPart.id, {
-        ...selectedPart.attrs,
+      updateComponent(selectedPart.id, {
+        ...selectedPart.attributes,
         [key]: value,
       });
     }
@@ -258,7 +259,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
 
       <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
         <button
-          onClick={onRotate}
+          onClick={() => rotateComponent(selectedPart!.id)}
           title="Rotate 90°"
           style={{
             flex: 1,
@@ -275,7 +276,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
           <RotateCw size={14} /> Rotate
         </button>
         <button
-          onClick={onDelete}
+          onClick={() => removeComponent(selectedPart!.id)}
           title="Delete part"
           style={{
             flex: 1,
@@ -295,7 +296,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
 
       <div style={{ flex: 1, overflowY: "auto" }}>
         {attributes.map((attr) => {
-          const value = selectedPart?.attrs[attr.key] ?? "";
+          const value = selectedPart?.attributes[attr.key] ?? "";
 
           return (
             <div key={attr.key} style={{ marginBottom: "16px" }}>

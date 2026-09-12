@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { FolderOpen, CircuitBoard } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
 import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
-import { getRecentProjects } from "../diagram";
+import { ProjectService } from "../application/project-service";
 
 interface SavedViewProps {
   onOpenProject: (path?: string) => void;
@@ -17,8 +16,8 @@ export const SavedView: React.FC<SavedViewProps> = ({ onOpenProject }) => {
     const fetchProjects = async () => {
       try {
         const [recent, scanned] = await Promise.all([
-          getRecentProjects().catch(() => []),
-          invoke<string[]>("list_projects").catch(() => []),
+          ProjectService.getRecentProjects().catch(() => []),
+          ProjectService.listProjects().catch(() => []),
         ]);
         const merged = Array.from(new Set([...recent, ...scanned]));
         setProjects(merged);

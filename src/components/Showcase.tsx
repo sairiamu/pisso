@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Button } from "./Button";
 import { IconButton } from "./IconButton";
 import { Card, CardHeader, CardBody, CardFooter } from "./Card";
-import { Panel, PanelHeader, PanelBody } from "./Panel";
+import { Panel, PanelHeader, PanelBody, PanelFooter } from "./Panel";
 import { Separator } from "./Separator";
 import { Input } from "./Input";
 import { Textarea } from "./Textarea";

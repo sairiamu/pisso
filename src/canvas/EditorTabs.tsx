@@ -5,7 +5,7 @@ import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
 import { RunButton } from "./RunButton";
 import { FileEntry } from "../App";
-import { BoardInfo } from "./CanvasShell";
+import { BoardInfo } from "../domain/models";
 
 interface EditorTabsProps {
   projectPath: string | null;

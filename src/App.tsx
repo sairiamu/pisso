@@ -1,21 +1,14 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
-import { invoke } from "@tauri-apps/api/core";
-import { CanvasShell, CanvasShellHandle, BoardInfo } from "./canvas/CanvasShell";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { ProjectService } from "./application/project-service";
+import { CanvasShell, CanvasShellHandle } from "./canvas/CanvasShell";
+import { BoardInfo } from "./domain/models";
 import { AppShell, AppView } from "./canvas/AppShell";
 import { AppMode } from "./canvas/ModeSwitcher";
-import {
-  loadProject,
-  loadProjectFiles,
-  saveProjectMetadata,
-  loadProjectMetadata,
-  saveFullProject,
-  addRecentProject
-} from "./diagram";
 import { ToolBox } from "./canvas/ToolBox";
 import { CodeEditor } from "./components/CodeEditor";
 import { EditorTabs } from "./canvas/EditorTabs";
 import { useSimulation } from "./simulator/SimulationContext";
+import { useCircuit } from "./domain/CircuitContext";
 import { Dashboard } from "./views/Dashboard";
 import { AIView } from "./views/AI";
 import { ClassesView } from "./views/Classes";
@@ -25,6 +18,7 @@ import { LibrariesView } from "./views/Libraries";
 import { ComponentLab } from "./components/Showcase";
 import { X } from "lucide-react";
 import { COLORS } from "./CONSTANTS/colors";
+import { SystemApi } from "./infrastructure/tauri/system-api";
 
 export interface FileEntry {
   name: string;
@@ -57,6 +51,7 @@ function App() {
   ]);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const { isSimulating, setIsSimulating, appendBuildOutput } = useSimulation();
+  const { circuit, setCircuit, addComponent, clearCircuit } = useCircuit();
   const [lastHex, setLastHex] = useState<string | null>(null);
   const [mode, setMode] = useState<AppMode>("design");
   const [debugStatus, setDebugStatus] = useState<string>("");
@@ -116,7 +111,7 @@ function App() {
 
   const handleNewProject = async (name: string) => {
     try {
-      const newProjectPath = await invoke<string>("create_new_project", { name });
+      const newProjectPath = await ProjectService.createNewProject(name);
 
       setProjectPath(newProjectPath);
       setFiles([{ name: "sketch.ino", content: INITIAL_CODE }]);
@@ -125,9 +120,7 @@ function App() {
       setView("workspace");
       setMode("design");
 
-      setTimeout(() => {
-        canvasRef.current?.setDiagram({ version: 1, parts: [], connections: [] });
-      }, 50);
+      clearCircuit();
 
       setDebugStatus(`Project "${name}" created`);
       setTimeout(() => setDebugStatus(""), 2000);
@@ -152,16 +145,14 @@ function App() {
     if (!currentPath) {
       let defaultPath: string | undefined;
       try {
-        defaultPath = await invoke<string>("get_projects_path");
+        defaultPath = await ProjectService.getProjectsPath();
       } catch (e) {}
 
-      const selected = await open({
-        directory: true,
-        multiple: false,
+      const selected = await SystemApi.openDirectoryDialog(
         defaultPath,
-        title: "Select Folder to Save Project"
-      });
-      if (selected && typeof selected === 'string') {
+        "Select Folder to Save Project"
+      );
+      if (selected) {
         currentPath = selected;
         setProjectPath(selected);
       } else {
@@ -171,15 +162,13 @@ function App() {
 
     if (!canvasRef.current) return;
     try {
-      const diagram = canvasRef.current.getDiagram();
-
       // Save everything (Design + Code) in one atomic-like operation
-      await saveFullProject(currentPath, diagram, files);
+      await ProjectService.saveFullProject(currentPath, circuit, files);
 
-      await addRecentProject(currentPath);
+      await ProjectService.addRecentProject(currentPath);
 
       // Save metadata separately as it's not core project data
-      await saveProjectMetadata(currentPath, { activeFileIndex });
+      await ProjectService.saveProjectMetadata(currentPath, { activeFileIndex });
 
       setDebugStatus("Project saved successfully");
       setTimeout(() => setDebugStatus(""), 2000);
@@ -197,29 +186,24 @@ function App() {
     } else {
       let defaultPath: string | undefined;
       try {
-        defaultPath = await invoke<string>("get_projects_path");
+        defaultPath = await ProjectService.getProjectsPath();
       } catch (e) {}
 
-      const result = await open({
-        directory: true,
-        multiple: false,
+      selected = await SystemApi.openDirectoryDialog(
         defaultPath,
-        title: "Open Project Folder"
-      });
-      if (result && typeof result === 'string') {
-        selected = result;
-      }
+        "Open Project Folder"
+      );
     }
 
     if (selected) {
       try {
-        const diagram = await loadProject(selected);
-        const projectFiles = await loadProjectFiles(selected);
-        const metadata = await loadProjectMetadata(selected);
+        const circuit = await ProjectService.loadProject(selected);
+        const projectFiles = await ProjectService.loadProjectFiles(selected);
+        const metadata = await ProjectService.loadProjectMetadata(selected);
 
         setProjectPath(selected);
-        await addRecentProject(selected);
-        canvasRef.current?.setDiagram(diagram);
+        await ProjectService.addRecentProject(selected);
+        setCircuit(circuit);
 
         if (projectFiles.length > 0) {
           setFiles(projectFiles);
@@ -242,21 +226,24 @@ function App() {
   const handleCloseProject = () => {
     setProjectPath(null);
     setIsProjectActive(false);
-    canvasRef.current?.setDiagram({ version: 1, parts: [], connections: [] });
+    clearCircuit();
     setView("dashboard");
   };
 
   const handleAddPart = useCallback((type: string) => {
     console.log("App: Adding part", type);
     setDebugStatus(`Adding ${type}...`);
-    if (canvasRef.current) {
-      canvasRef.current.addPart(type);
-      setDebugStatus(`Added ${type}`);
-    } else {
-      setDebugStatus("Error: canvasRef is null");
-    }
+
+    // Default position
+    const pos = {
+      x: 150 + (circuit.components.length * 50) % 400,
+      y: 150 + (circuit.components.length * 50) % 400
+    };
+    addComponent(type, pos.x, pos.y);
+
+    setDebugStatus(`Added ${type}`);
     setTimeout(() => setDebugStatus(""), 2000);
-  }, []);
+  }, [circuit.components.length, addComponent]);
 
   if (error) {
     return (

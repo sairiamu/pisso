@@ -1,4 +1,4 @@
-import { routeOrthogonal, Point, RouterObstacles } from "./router";
+import { routeOrthogonal, Point, RouterObstacles } from "../domain/wire-router";
 
 function testRouter() {
   console.log("Running Router Tests...");

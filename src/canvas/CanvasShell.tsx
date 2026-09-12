@@ -5,14 +5,13 @@ import {
   BackgroundVariant,
   Node,
   Edge,
-  useNodesState,
-  useEdgesState,
-  addEdge,
-  Connection,
+  Connection as RFConnection,
   ConnectionMode,
   ReactFlowInstance,
   ReactFlowProvider,
   Panel as RFPanel,
+  NodeChange,
+  EdgeChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Grid } from "lucide-react";
@@ -22,7 +21,10 @@ import { PartNode } from "./PartNode";
 import { WireEdge } from "./WireEdge";
 import { InspectorPanel } from "./InspectorPanel";
 import { ProjectContextMenu } from "./ProjectContextMenu";
-import { resolveNode, Diagram, PartInstance } from "../diagram";
+import { resolveNode } from "../domain/circuit-resolver";
+import { Circuit, ComponentInstance, BoardInfo, PinReference } from "../domain/models";
+import { circuitToReactFlow } from "../domain/circuit-utils";
+import { useCircuit } from "../domain/CircuitContext";
 import { PARTS_REGISTRY } from "../parts";
 import { useSimulation } from "../simulator/SimulationContext";
 import { ErrorBoundary } from "../components/ErrorBoundary";
@@ -39,16 +41,9 @@ const edgeTypes = {
   wire: WireEdge,
 };
 
-export interface BoardInfo {
-  id: string;
-  type: string;
-  label: string;
-  fqbn: string;
-}
-
 export interface CanvasShellHandle {
-  getDiagram: () => Diagram;
-  setDiagram: (diagram: Diagram) => void;
+  getCircuit: () => Circuit;
+  setCircuit: (circuit: Circuit) => void;
   addPart: (type: string) => void;
   getBoards: () => BoardInfo[];
 }
@@ -58,8 +53,109 @@ interface CanvasInternalProps {
 }
 
 const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onBoardsChange }, ref) => {
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const {
+    circuit,
+    addComponent,
+    removeComponent,
+    moveComponent,
+    rotateComponent,
+    connectPins,
+    disconnectPins,
+    updateComponent,
+    updateConnectionStyle,
+    addWaypoint,
+    moveWaypoint,
+    removeWaypoint,
+    setCircuit,
+    undo,
+    redo,
+  } = useCircuit();
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo]);
+
+  const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
+  const [selectedEdgeIds, setSelectedEdgeIds] = useState<Set<string>>(new Set());
+
+  const { nodes, edges } = useMemo(() => {
+    const { nodes: baseNodes, edges: baseEdges } = circuitToReactFlow(circuit);
+
+    const enrichedNodes = baseNodes.map(node => ({
+      ...node,
+      selected: selectedNodeIds.has(node.id),
+    }));
+
+    const enrichedEdges = baseEdges.map(edge => {
+      const sourcePin: PinReference = { componentId: edge.source, pinName: edge.sourceHandle || "" };
+      const connectedPins = resolveNode(circuit, sourcePin);
+
+      const has5V = connectedPins.some(p => p.pinName.includes("5V"));
+      const hasGND = connectedPins.some(p => p.pinName.toLowerCase().includes("gnd"));
+      const isShorted = has5V && hasGND;
+
+      return {
+        ...edge,
+        selected: selectedEdgeIds.has(edge.id),
+        data: {
+          ...edge.data,
+          isShorted,
+        }
+      };
+    });
+
+    return { nodes: enrichedNodes, edges: enrichedEdges };
+  }, [circuit, selectedNodeIds, selectedEdgeIds]);
+
+  const onNodesChange = useCallback((changes: NodeChange[]) => {
+    changes.forEach((change) => {
+      if (change.type === "position" && change.position) {
+        moveComponent(change.id, change.position.x, change.position.y);
+      }
+      if (change.type === "remove") {
+        removeComponent(change.id);
+      }
+      if (change.type === "select") {
+        setSelectedNodeIds(prev => {
+          const next = new Set(prev);
+          if (change.selected) next.add(change.id);
+          else next.delete(change.id);
+          return next;
+        });
+      }
+    });
+  }, [moveComponent, removeComponent]);
+
+  const onEdgesChange = useCallback((changes: EdgeChange[]) => {
+    changes.forEach((change) => {
+      if (change.type === "remove") {
+        disconnectPins(change.id);
+      }
+      if (change.type === "select") {
+        setSelectedEdgeIds(prev => {
+          const next = new Set(prev);
+          if (change.selected) next.add(change.id);
+          else next.delete(change.id);
+          return next;
+        });
+      }
+    });
+  }, [disconnectPins]);
+
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
@@ -68,51 +164,13 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const routeCache = useRouteCache();
 
-  const onAddWaypoint = useCallback(
-    (edgeId: string, point: { x: number; y: number }, insertAtIndex: number) => {
-      setEdges((eds) =>
-        eds.map((edge) => {
-          if (edge.id !== edgeId) return edge;
-          const current = (edge.data?.waypoints as { x: number; y: number }[]) || [];
-          const next = [...current];
-          next.splice(insertAtIndex, 0, point);
-          return { ...edge, data: { ...edge.data, waypoints: next } };
-        })
-      );
-    },
-    [setEdges]
-  );
-
-  const onMoveWaypoint = useCallback(
-    (edgeId: string, index: number, point: { x: number; y: number }) => {
-      setEdges((eds) =>
-        eds.map((edge) => {
-          if (edge.id !== edgeId) return edge;
-          const current = [...((edge.data?.waypoints as { x: number; y: number }[]) || [])];
-          current[index] = point;
-          return { ...edge, data: { ...edge.data, waypoints: current } };
-        })
-      );
-    },
-    [setEdges]
-  );
-
-  const onRemoveWaypoint = useCallback(
-    (edgeId: string, index: number) => {
-      setEdges((eds) =>
-        eds.map((edge) => {
-          if (edge.id !== edgeId) return edge;
-          const current = (edge.data?.waypoints as { x: number; y: number }[]) || [];
-          return { ...edge, data: { ...edge.data, waypoints: current.filter((_, i) => i !== index) } };
-        })
-      );
-    },
-    [setEdges]
-  );
-
   const wireActions = useMemo(
-    () => ({ onAddWaypoint, onMoveWaypoint, onRemoveWaypoint }),
-    [onAddWaypoint, onMoveWaypoint, onRemoveWaypoint]
+    () => ({
+      onAddWaypoint: addWaypoint,
+      onMoveWaypoint: moveWaypoint,
+      onRemoveWaypoint: removeWaypoint
+    }),
+    [addWaypoint, moveWaypoint, removeWaypoint]
   );
 
   const onPaneContextMenu = useCallback(
@@ -135,108 +193,43 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
         return;
       }
 
-      const id = `${type}-${Math.random().toString(36).substr(2, 9)}`;
-
-      const newNode: Node = {
-        id,
-        type: definition.isBoard ? "board" : "part",
-        position: { x: 0, y: 0 }, // Will be updated
-        data: {
-          type,
-          attrs: definition.defaultAttrs ? { ...definition.defaultAttrs } : {},
-          rotation: 0,
-        },
+      const pos = position || {
+        x: 150 + (circuit.components.length * 50) % 400,
+        y: 150 + (circuit.components.length * 50) % 400
       };
 
-      setNodes((nds) => {
-        const pos = position || {
-          x: 150 + (nds.length * 50) % 400,
-          y: 150 + (nds.length * 50) % 400
-        };
-        const updatedNode = { ...newNode, position: pos };
-        console.log("Adding node:", updatedNode);
-        return [...nds, updatedNode];
-      });
+      addComponent(type, pos.x, pos.y, definition.defaultAttrs ? { ...definition.defaultAttrs } : {});
     } catch (err) {
       setLastError(String(err));
     }
-  }, [setNodes]);
+  }, [circuit.components.length, addComponent]);
 
   useImperativeHandle(
     ref,
     () => ({
-      getDiagram: () => ({
-        version: 1,
-        parts: nodes.map((n) => ({
-          id: n.id,
-          type: (n.data as any).type,
-          x: n.position.x,
-          y: n.position.y,
-          rotation: (n.data as any).rotation || 0,
-          attrs: (n.data as any).attrs || {},
-        })),
-        connections: edges.map((e) => ({
-          id: e.id,
-          from: { partId: e.source, pin: e.sourceHandle || "" },
-          to: { partId: e.target, pin: e.targetHandle || "" },
-          color: e.data?.color as string | undefined,
-          thickness: e.data?.thickness as number | undefined,
-          tracked: e.data?.tracked as boolean | undefined,
-          route: routeCache.get(e.id) || [],
-          waypoints: (e.data?.waypoints as { x: number; y: number }[]) || [],
-        })),
-      }),
-      setDiagram: (diagram: Diagram) => {
-        setNodes(
-          diagram.parts.map((p) => {
-            const definition = PARTS_REGISTRY.get(p.type);
-            return {
-              id: p.id,
-              type: definition?.isBoard ? "board" : "part",
-              position: { x: p.x, y: p.y },
-              data: { type: p.type, attrs: p.attrs, rotation: p.rotation },
-            };
-          })
-        );
-        setEdges(
-          diagram.connections.map((c) => ({
-            id: c.id,
-            source: c.from.partId,
-            sourceHandle: c.from.pin,
-            target: c.to.partId,
-            targetHandle: c.to.pin,
-            type: "wire",
-            data: {
-              isShorted: false,
-              color: c.color,
-              thickness: typeof c.thickness === "number" ? c.thickness : 3,
-              tracked: c.tracked === true,
-              waypoints: c.waypoints || [],
-            },
-          }))
-        );
+      getCircuit: () => circuit,
+      setCircuit: (newCircuit: Circuit) => {
+        setCircuit(newCircuit);
       },
       addPart: (type: string) => addPartInternal(type),
       getBoards: () => {
-        return nodes
-          .map((n) => {
-            const type = (n.data as any).type;
-            const definition = PARTS_REGISTRY.get(type);
+        return circuit.components
+          .map((c) => {
+            const definition = PARTS_REGISTRY.get(c.definitionId);
             if (definition?.isBoard) {
               return {
-                id: n.id,
-                type: type,
+                id: c.id,
+                type: c.definitionId,
                 label: definition.label,
                 fqbn: definition.fqbn!,
               };
             }
-            // Fallback for hardcoded types if registry lookup fails to find isBoard
-            if (type === 'wokwi-arduino-uno') {
+            if (c.definitionId === "wokwi-arduino-uno") {
               return {
-                id: n.id,
-                type: type,
-                label: definition?.label || 'Arduino Uno',
-                fqbn: definition?.fqbn || 'arduino:avr:uno',
+                id: c.id,
+                type: c.definitionId,
+                label: definition?.label || "Arduino Uno",
+                fqbn: definition?.fqbn || "arduino:avr:uno",
               };
             }
             return null;
@@ -244,7 +237,7 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
           .filter((b): b is BoardInfo => b !== null);
       },
     }),
-    [nodes, edges, setNodes, setEdges, addPartInternal]
+    [circuit, addPartInternal, setCircuit]
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -271,75 +264,36 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
     [reactFlowInstance, addPartInternal]
   );
 
-  // Validate connections and detect shorts
+  // Update simulation pin mappings
   useEffect(() => {
-    if (nodes.length === 0) return;
+    if (circuit.components.length === 0) return;
 
-    const diagram: Diagram = {
-      version: 1,
-      parts: nodes.map((n) => ({
-        id: n.id,
-        type: (n.data as any).type,
-        x: n.position.x,
-        y: n.position.y,
-        rotation: (n.data as any).rotation || 0,
-        attrs: (n.data as any).attrs || {},
-      })),
-      connections: edges.map((e) => ({
-        id: e.id,
-        from: { partId: e.source, pin: e.sourceHandle || "" },
-        to: { partId: e.target, pin: e.targetHandle || "" },
-      })),
-    };
-
-    let hasChanged = false;
-    const newEdges = edges.map((edge) => {
-      const sourcePin = { partId: edge.source, pin: edge.sourceHandle || "" };
-      const connectedPins = resolveNode(diagram, sourcePin);
-
-      const has5V = connectedPins.some(p => p.pin.includes("5V"));
-      const hasGND = connectedPins.some(p => p.pin.toLowerCase().includes("gnd"));
-      const isShorted = has5V && hasGND;
-
-      if (edge.data?.isShorted !== isShorted) {
-        hasChanged = true;
-        return { ...edge, data: { ...edge.data, isShorted } };
-      }
-      return edge;
-    });
-
-    if (hasChanged) {
-      setEdges(newEdges);
-    }
-
-    // Update simulation pin mappings
     const mappings: Record<string, (string | number)[]> = {};
-    const unoPart = diagram.parts.find(p => p.type === 'wokwi-arduino-uno');
+    const unoComponent = circuit.components.find(c => c.definitionId === 'wokwi-arduino-uno');
     let rxTxConnected = false;
 
-    if (unoPart) {
-      diagram.parts.forEach(part => {
-        const definition = PARTS_REGISTRY.get(part.type);
+    if (unoComponent) {
+      circuit.components.forEach(comp => {
+        const definition = PARTS_REGISTRY.get(comp.definitionId);
         if (definition) {
-          // Find all unique pins of this part that have connections in the edges
+          // Find all connected pins of this component
           const connectedPinNames = new Set<string>();
-          edges.forEach(edge => {
-            if (edge.source === part.id && edge.sourceHandle) connectedPinNames.add(edge.sourceHandle);
-            if (edge.target === part.id && edge.targetHandle) connectedPinNames.add(edge.targetHandle);
+          circuit.connections.forEach(conn => {
+            if (conn.from.componentId === comp.id) connectedPinNames.add(conn.from.pinName);
+            if (conn.to.componentId === comp.id) connectedPinNames.add(conn.to.pinName);
           });
 
           connectedPinNames.forEach(pinName => {
-            const connectedPins = resolveNode(diagram, { partId: part.id, pin: pinName });
+            const connectedPins = resolveNode(circuit, { componentId: comp.id, pinName });
             const unoConnections = connectedPins
-              .filter(p => p.partId === unoPart.id)
-              .map(p => p.pin);
+              .filter(p => p.componentId === unoComponent.id)
+              .map(p => p.pinName);
 
             if (unoConnections.length > 0) {
-              mappings[`${part.id}:${pinName}`] = unoConnections;
+              mappings[`${comp.id}:${pinName}`] = unoConnections;
 
-              // Check if RX(0) or TX(1) are connected to anything else besides the Uno itself
               if (unoConnections.includes('0') || unoConnections.includes('1')) {
-                if (connectedPins.some(p => p.partId !== unoPart.id)) {
+                if (connectedPins.some(p => p.componentId !== unoComponent.id)) {
                   rxTxConnected = true;
                 }
               }
@@ -350,28 +304,27 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
     }
     setPinMappings(mappings);
     setSerialConnected(rxTxConnected);
-  }, [nodes, edges, setEdges, setPinMappings, setSerialConnected]);
+  }, [circuit, setPinMappings, setSerialConnected]);
 
-  // Debug: log nodes to console
+  // Debug: log components to console
   useEffect(() => {
-    console.log("Current Canvas Nodes:", nodes);
+    console.log("Current Domain Circuit Components:", circuit.components);
     if (onBoardsChange) {
-      const boards = nodes
-        .map((n) => {
-          const type = (n.data as any).type;
-          const definition = PARTS_REGISTRY.get(type);
+      const boards = circuit.components
+        .map((c) => {
+          const definition = PARTS_REGISTRY.get(c.definitionId);
           if (definition?.isBoard) {
             return {
-              id: n.id,
-              type: type,
+              id: c.id,
+              type: c.definitionId,
               label: definition.label,
               fqbn: definition.fqbn!,
             };
           }
-          if (type === 'wokwi-arduino-uno') {
+          if (c.definitionId === 'wokwi-arduino-uno') {
             return {
-              id: n.id,
-              type: type,
+              id: c.id,
+              type: c.definitionId,
               label: definition?.label || 'Arduino Uno',
               fqbn: definition?.fqbn || 'arduino:avr:uno',
             };
@@ -381,99 +334,25 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
         .filter((b): b is BoardInfo => b !== null);
       onBoardsChange(boards);
     }
-  }, [nodes, onBoardsChange]);
+  }, [circuit, onBoardsChange]);
 
   const onConnect = useCallback(
-    (params: Connection) => {
+    (params: RFConnection) => {
       console.log("Connecting:", params);
-      const newEdge: Edge = {
-        id: `w-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        source: params.source || "",
-        sourceHandle: params.sourceHandle,
-        target: params.target || "",
-        targetHandle: params.targetHandle,
-        type: "wire",
-        data: {
-          isShorted: false,
-          color: undefined,
-          thickness: 3,
-          tracked: false,
-          waypoints: [],
-        },
-      };
-      setEdges((eds) => addEdge(newEdge, eds));
-    },
-    [setEdges]
-  );
-
-  const onUpdateEdgeStyle = useCallback(
-    (id: string, changes: Partial<{ color: string; thickness: number; tracked: boolean }>) => {
-      setEdges((eds) =>
-        eds.map((edge) => (edge.id === id ? { ...edge, data: { ...edge.data, ...changes } } : edge))
+      connectPins(
+        { componentId: params.source || "", pinName: params.sourceHandle || "" },
+        { componentId: params.target || "", pinName: params.targetHandle || "" }
       );
     },
-    [setEdges]
-  );
-
-  const onUpdateAttributes = useCallback(
-    (id: string, attrs: Record<string, any>) => {
-      setNodes((nds) =>
-        nds.map((node) => {
-          if (node.id === id) {
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                attrs,
-              },
-            };
-          }
-          return node;
-        })
-      );
-    },
-    [setNodes]
-  );
-
-  const onRotatePart = useCallback(
-    (id: string) => {
-      setNodes((nds) =>
-        nds.map((node) => {
-          if (node.id === id) {
-            const current = (node.data as any).rotation || 0;
-            return {
-              ...node,
-              data: { ...node.data, rotation: (current + 90) % 360 },
-            };
-          }
-          return node;
-        })
-      );
-    },
-    [setNodes]
-  );
-
-  const onDeletePart = useCallback(
-    (id: string) => {
-      setNodes((nds) => nds.filter((node) => node.id !== id));
-      setEdges((eds) => eds.filter((edge) => edge.source !== id && edge.target !== id));
-    },
-    [setNodes, setEdges]
+    [connectPins]
   );
 
   const selectedNode = nodes.find((n) => n.selected);
   const selectedEdge = edges.find((e) => e.selected) || null;
-  const selectedPart = useMemo<PartInstance | null>(() => {
-    if (!selectedNode || selectedNode.type !== "part") return null;
-    return {
-      id: selectedNode.id,
-      type: (selectedNode.data as any).type,
-      x: selectedNode.position.x,
-      y: selectedNode.position.y,
-      rotation: (selectedNode.data as any).rotation || 0,
-      attrs: (selectedNode.data as any).attrs || {},
-    };
-  }, [selectedNode]);
+  const selectedPart = useMemo<ComponentInstance | null>(() => {
+    if (!selectedNode) return null;
+    return circuit.components.find((c) => c.id === selectedNode.id) || null;
+  }, [selectedNode, circuit.components]);
 
   const memoizedNodeTypes = useMemo(() => nodeTypes, []);
   const memoizedEdgeTypes = useMemo(() => edgeTypes, []);
@@ -616,13 +495,6 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
               thickness: selectedEdge.data?.thickness as number | undefined,
               tracked: selectedEdge.data?.tracked as boolean | undefined,
             } : null}
-            onUpdateAttributes={onUpdateAttributes}
-            onUpdateEdgeStyle={onUpdateEdgeStyle}
-            onRotate={() => selectedPart && onRotatePart(selectedPart.id)}
-            onDelete={() => {
-              if (selectedPart) onDeletePart(selectedPart.id);
-              if (selectedEdge) setEdges((eds) => eds.filter((e) => e.id !== selectedEdge.id));
-            }}
           />
         </div>
       )}
