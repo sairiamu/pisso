@@ -695,9 +695,12 @@ fn load_diagram(project_path: String) -> Result<String, String> {
 
 #[derive(serde::Serialize)]
 pub struct CompileResult {
+    pub success: bool,
     pub hex: String,
     pub flash_used: u32,
     pub ram_used: u32,
+    pub stdout: String,
+    pub stderr: String,
 }
 
 #[tauri::command]
@@ -962,6 +965,9 @@ async fn compile_sketch(
     let mut extra_obj_files = Vec::new();
     let project_entries = fs::read_dir(&project_dir).map_err(|e| e.to_string())?;
 
+    let mut all_stdout = String::new();
+    let mut all_stderr = String::new();
+
     for entry in project_entries {
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
@@ -1006,8 +1012,18 @@ async fn compile_sketch(
                     .arg(&obj_file);
 
                 let output = cmd.output().map_err(|e| format!("Failed to compile {}: {}", file_name, e))?;
+                all_stdout.push_str(&String::from_utf8_lossy(&output.stdout));
+                all_stderr.push_str(&String::from_utf8_lossy(&output.stderr));
+
                 if !output.status.success() {
-                    return Err(format!("Error compiling {}: {}", file_name, String::from_utf8_lossy(&output.stderr)));
+                    return Ok(CompileResult {
+                        success: false,
+                        hex: "".into(),
+                        flash_used: 0,
+                        ram_used: 0,
+                        stdout: all_stdout,
+                        stderr: all_stderr,
+                    });
                 }
             }
         }
@@ -1044,8 +1060,18 @@ async fn compile_sketch(
         .output()
         .map_err(|e| format!("Failed to execute avr-g++: {}", e))?;
 
+    all_stdout.push_str(&String::from_utf8_lossy(&compile_output.stdout));
+    all_stderr.push_str(&String::from_utf8_lossy(&compile_output.stderr));
+
     if !compile_output.status.success() {
-        return Err(String::from_utf8_lossy(&compile_output.stderr).to_string());
+        return Ok(CompileResult {
+            success: false,
+            hex: "".into(),
+            flash_used: 0,
+            ram_used: 0,
+            stdout: all_stdout,
+            stderr: all_stderr,
+        });
     }
 
     // 3. Link everything together
@@ -1075,8 +1101,18 @@ async fn compile_sketch(
     let link_output = link_cmd.output()
         .map_err(|e| format!("Failed to execute linker: {}", e))?;
 
+    all_stdout.push_str(&String::from_utf8_lossy(&link_output.stdout));
+    all_stderr.push_str(&String::from_utf8_lossy(&link_output.stderr));
+
     if !link_output.status.success() {
-        return Err(format!("Linker error: {}", String::from_utf8_lossy(&link_output.stderr)));
+        return Ok(CompileResult {
+            success: false,
+            hex: "".into(),
+            flash_used: 0,
+            ram_used: 0,
+            stdout: all_stdout,
+            stderr: all_stderr,
+        });
     }
 
     let copy_output = Command::new(&avr_objcopy)
@@ -1089,8 +1125,18 @@ async fn compile_sketch(
         .output()
         .map_err(|e| format!("Failed to execute avr-objcopy: {}", e))?;
 
+    all_stdout.push_str(&String::from_utf8_lossy(&copy_output.stdout));
+    all_stderr.push_str(&String::from_utf8_lossy(&copy_output.stderr));
+
     if !copy_output.status.success() {
-        return Err(String::from_utf8_lossy(&copy_output.stderr).to_string());
+        return Ok(CompileResult {
+            success: false,
+            hex: "".into(),
+            flash_used: 0,
+            ram_used: 0,
+            stdout: all_stdout,
+            stderr: all_stderr,
+        });
     }
 
     // 4. Get memory usage info
@@ -1119,9 +1165,12 @@ async fn compile_sketch(
 
     let hex_content = fs::read_to_string(&output_hex).map_err(|e| e.to_string())?;
     Ok(CompileResult {
+        success: true,
         hex: hex_content,
         flash_used,
         ram_used,
+        stdout: all_stdout,
+        stderr: all_stderr,
     })
 }
 

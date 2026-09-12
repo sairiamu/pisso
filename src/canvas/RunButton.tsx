@@ -1,15 +1,16 @@
 import React, { useState } from "react";
 import { COLORS } from "../CONSTANTS/colors";
-import { writeSketch } from "../domain/sketch-generator";
 import { FileEntry } from "../App";
 import { BoardInfo } from "../domain/models";
 import { ProjectManager } from "../application/ProjectManager";
-import { CompilerService } from "../application/compiler-service";
+import { BuildManager } from "../application/BuildManager";
+import { Project, ProjectFile } from "../domain/models";
 
 interface RunButtonProps {
   projectPath: string | null;
   files: FileEntry[];
   onOutput?: (output: string | null) => void;
+  onBuildResult?: (result: BuildResult | null) => void;
   onCompileSuccess?: (hex: string) => void;
   onProjectPathChange?: (path: string) => void;
   boards: BoardInfo[];
@@ -24,6 +25,7 @@ export const RunButton: React.FC<RunButtonProps> = ({
   projectPath,
   files,
   onOutput,
+  onBuildResult,
   onCompileSuccess,
   onProjectPathChange,
   boards,
@@ -52,6 +54,7 @@ export const RunButton: React.FC<RunButtonProps> = ({
     setIsCompiling(true);
     setStatus("Compiling...");
     onOutput?.(null); // Clear previous output
+    onBuildResult?.(null);
 
     if (boards.length === 0) {
       const errorMsg = "Error: No board found in your design. Add an Arduino board to the canvas before compiling.";
@@ -81,28 +84,39 @@ export const RunButton: React.FC<RunButtonProps> = ({
     onOutput?.(`Compiling project for ${board.label}...`);
 
     try {
-      // 1. Prepare project files
-      const projectFiles = files.map(file => ({
-          name: file.name,
-          content: file.name.endsWith(".ino") ? writeSketch(file.content) : file.content
-      }));
+      // 1. Construct a temporary project object for the BuildManager
+      // In a more mature architecture, the project would be passed in directly.
+      const buildProject: Partial<Project> & { rootPath: string, files: ProjectFile[] } = {
+        rootPath: activePath,
+        files: files as ProjectFile[],
+        circuit: { components: [], connections: [], nets: [], version: 1 } // Simplified for build
+      };
 
-      // Find the main sketch file (sketch.ino)
-      const mainSketch = files.find(f => f.name.endsWith(".ino")) || files[0];
+      // 2. Invoke the BuildManager
+      const result = await BuildManager.build(buildProject as Project, board.fqbn);
+      onBuildResult?.(result);
 
-      // 2. Invoke the compiler service
-      const result = await CompilerService.compile(
-        activePath,
-        projectFiles,
-        board.fqbn,
-        mainSketch.name
-      );
+      if (result.status === 'success') {
+        setStatus(result.output.split('\n').pop() || "Success");
+        onOutput?.(result.output);
+        if (result.hex) {
+          onCompileSuccess?.(result.hex);
+        }
+        succeeded = true;
+      } else {
+        const firstError = result.diagnostics.find(d => d.severity === 'error');
+        const firstWarning = result.diagnostics.find(d => d.severity === 'warning');
 
-      const successMsg = `Successfully compiled: Flash ${result.flash_used} bytes, RAM ${result.ram_used} bytes`;
-      setStatus(successMsg);
-      onOutput?.(successMsg);
-      onCompileSuccess?.(result.hex);
-      succeeded = true;
+        if (firstError) {
+          setStatus(`Error: ${firstError.message}`);
+        } else if (firstWarning) {
+          setStatus(`Warning: ${firstWarning.message}`);
+        } else {
+          const lastLine = result.output.split("\n").pop();
+          setStatus(lastLine && lastLine.trim() ? lastLine : "Compilation failed");
+        }
+        onOutput?.(result.output);
+      }
     } catch (err) {
       const errorMsg = String(err);
       setStatus(`Error: ${errorMsg.split("\n")[0]}`);

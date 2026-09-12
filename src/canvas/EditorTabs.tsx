@@ -5,7 +5,7 @@ import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
 import { RunButton } from "./RunButton";
 import { FileEntry } from "../App";
-import { BoardInfo } from "../domain/models";
+import { BoardInfo, BuildResult } from "../domain/models";
 
 interface EditorTabsProps {
   projectPath: string | null;
@@ -16,6 +16,7 @@ interface EditorTabsProps {
   onCloseTab: (index: number) => void;
 
   onOutput?: (output: string | null) => void;
+  onBuildResult?: (result: BuildResult | null) => void;
   onCompileSuccess?: (hex: string) => void;
   onProjectPathChange?: (path: string) => void;
   boards: BoardInfo[];
@@ -33,6 +34,7 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({
   onAddTab,
   onCloseTab,
   onOutput,
+  onBuildResult,
   onCompileSuccess,
   onProjectPathChange,
   boards,
@@ -76,7 +78,7 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({
                   borderBottom: activeFileIndex === index ? "none" : "none",
                   cursor: "pointer",
                   marginBottom: activeFileIndex === index ? "-1px" : "0",
-                  zIndex: activeFileIndex === index ? 2 : 1,
+                  zIndex: 2,
                   whiteSpace: "nowrap"
                 }}
               >
@@ -125,6 +127,7 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({
               projectPath={projectPath}
               files={files}
               onOutput={onOutput}
+              onBuildResult={onBuildResult}
               onCompileSuccess={onCompileSuccess}
               onProjectPathChange={onProjectPathChange}
               boards={boards}

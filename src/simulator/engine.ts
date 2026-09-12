@@ -14,6 +14,8 @@ import {
 } from 'avr8js';
 import { parse } from 'intel-hex';
 import { UNO_PIN_MAP } from './pinMap';
+import { BoardDefinition } from '../domain/models';
+import { ARDUINO_UNO } from '../domain/boards';
 
 export type PinState = 'HIGH' | 'LOW';
 
@@ -32,11 +34,13 @@ export class SimulationEngine {
   private usart: AVRUSART;
   private running = false;
   private lastTime = 0;
+  private board: BoardDefinition;
 
   public onPinChange?: (pin: string | number, state: PinState) => void;
   public onUartByte?: (byte: number) => void;
 
-  constructor(flash: Uint16Array) {
+  constructor(flash: Uint16Array, board: BoardDefinition = ARDUINO_UNO) {
+    this.board = board;
     this.cpu = new CPU(flash);
     this.timer0 = new AVRTimer(this.cpu, timer0Config);
     this.timer1 = new AVRTimer(this.cpu, timer1Config);
@@ -46,7 +50,7 @@ export class SimulationEngine {
     this.portC = new AVRIOPort(this.cpu, portCConfig);
     this.portD = new AVRIOPort(this.cpu, portDConfig);
 
-    this.usart = new AVRUSART(this.cpu, usart0Config, 16000000);
+    this.usart = new AVRUSART(this.cpu, usart0Config, this.board.clock);
 
     this.setupListeners();
   }
@@ -54,13 +58,15 @@ export class SimulationEngine {
   /**
    * Factory method to create an engine from an Intel Hex string.
    */
-  public static fromHex(hex: string): SimulationEngine {
+  public static fromHex(hex: string, board: BoardDefinition = ARDUINO_UNO): SimulationEngine {
     const buffer = parse(hex).data;
-    const flash = new Uint16Array(32768);
+    // TODO: Use board.mcu or some other metadata to determine flash size
+    const flashSize = board.id === 'arduino-uno' ? 32768 : 32768;
+    const flash = new Uint16Array(flashSize);
     for (let i = 0; i < buffer.length; i += 2) {
       flash[i / 2] = buffer[i] | (buffer[i + 1] << 8);
     }
-    return new SimulationEngine(flash);
+    return new SimulationEngine(flash, board);
   }
 
   private setupListeners() {
@@ -74,8 +80,9 @@ export class SimulationEngine {
   }
 
   private handlePortChange(portName: 'B' | 'C' | 'D', port: AVRIOPort) {
-    Object.keys(UNO_PIN_MAP).forEach((pin) => {
-      const mapping = UNO_PIN_MAP[pin];
+    const pinMap = this.board.simulation.pinMap || UNO_PIN_MAP;
+    Object.keys(pinMap).forEach((pin) => {
+      const mapping = pinMap[pin];
       if (mapping.port === portName) {
         const state = port.pinState(mapping.bit) ? 'HIGH' : 'LOW';
         this.onPinChange?.(pin, state);
@@ -116,8 +123,8 @@ export class SimulationEngine {
     if (deltaMs > 100) deltaMs = 100; // Cap to avoid huge catch-up jumps
     this.lastTime = now;
 
-    // 16MHz clock = 16000 cycles per millisecond
-    const cyclesToRun = Math.floor(deltaMs * 16000);
+    // clock speed cycles per millisecond
+    const cyclesToRun = Math.floor(deltaMs * (this.board.clock / 1000));
 
     for (let i = 0; i < cyclesToRun; i++) {
       avrInstruction(this.cpu);
@@ -140,7 +147,8 @@ export class SimulationEngine {
    * Returns the current state of a specific Arduino pin.
    */
   public getPinState(pin: string | number): PinState {
-    const mapping = UNO_PIN_MAP[pin];
+    const pinMap = this.board.simulation.pinMap || UNO_PIN_MAP;
+    const mapping = pinMap[pin];
     if (!mapping) return 'LOW';
     let port: AVRIOPort;
     switch (mapping.port) {

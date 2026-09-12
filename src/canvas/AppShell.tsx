@@ -27,6 +27,7 @@ import { BoardSelector } from "./BoardSelector";
 import { UploadButton } from "./UploadButton";
 import { BoardInfo } from "../domain/models";
 import { ProjectStatus } from "../application/ProjectManager";
+import { getBoardByFqbn } from "../domain/boards";
 
 import { FileEntry } from "../App";
 
@@ -42,6 +43,7 @@ interface AppShellProps {
   onOpenProject?: () => void;
   onSaveProject?: () => void;
   onCloseProject?: () => void;
+  onSelectDiagnostic?: (diagnostic: Diagnostic) => void;
   saveDisabled?: boolean;
   lastHex?: string | null;
   isSimulating?: boolean;
@@ -68,6 +70,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   onModeChange,
   onNewProject,
   onSaveProject,
+  onSelectDiagnostic,
   saveDisabled,
   lastHex,
   isSimulating,
@@ -92,6 +95,7 @@ export const AppShell: React.FC<AppShellProps> = ({
     clearSerialOutput,
     buildOutput,
     appendBuildOutput,
+    setLastBuildResult,
     setWriteSerialHandler,
     serialSource,
     setSerialSource,
@@ -213,9 +217,17 @@ export const AppShell: React.FC<AppShellProps> = ({
     clearSerialOutput();
     setSerialSource('simulation');
 
+    const boardInfo = boards.find(b => b.id === selectedBoardId);
+    const boardDef = boardInfo ? getBoardByFqbn(boardInfo.fqbn) : undefined;
+
+    if (!boardDef) {
+        console.warn("No board definition found for simulation, falling back to default.");
+    }
+
     try {
       SimulationService.start(
         lastHex,
+        boardDef!, // Passing boardDef (will use default if undefined in start)
         (pin, state) => setPinState(pin, state),
         (byte) => appendSerialOutput(String.fromCharCode(byte))
       );
@@ -559,6 +571,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                 files={files}
                 onCompileSuccess={onCompileSuccess}
                 onOutput={appendBuildOutput}
+                onBuildResult={setLastBuildResult}
                 onUploadSuccess={handleUploadSuccess}
                 boards={boards}
                 selectedBoardId={selectedBoardId}
@@ -631,7 +644,10 @@ export const AppShell: React.FC<AppShellProps> = ({
                 }}
               />
               {bottomPanel === 'terminal' ? (
-                <TerminalPanel onClose={() => setBottomPanel(null)} />
+                <TerminalPanel
+                  onClose={() => setBottomPanel(null)}
+                  onSelectDiagnostic={onSelectDiagnostic}
+                />
               ) : (
                 <GraphPanel onClose={() => setBottomPanel(null)} />
               )}

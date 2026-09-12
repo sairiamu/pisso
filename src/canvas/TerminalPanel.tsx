@@ -1,17 +1,21 @@
-import React, { useState } from "react";
-import { X, Plus, Terminal, Activity } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { X, Plus, Terminal, Activity, AlertCircle } from "lucide-react";
 import { Panel } from "../components/Panel";
 import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
 import { useSimulation } from "../simulator/SimulationContext";
 import { ConsoleView } from "./ConsoleView";
 import { SerialPanel } from "./SerialPanel";
+import { BuildDiagnosticsView } from "./BuildDiagnosticsView";
+
+import { Diagnostic } from "../domain/models";
 
 interface TerminalPanelProps {
   onClose?: () => void;
+  onSelectDiagnostic?: (diagnostic: Diagnostic) => void;
 }
 
-type TerminalTabType = "output" | "serial" | string;
+type TerminalTabType = "output" | "serial" | "issues" | string;
 
 interface TabDef {
   id: TerminalTabType;
@@ -19,18 +23,27 @@ interface TabDef {
   icon?: React.ReactNode;
 }
 
-export const TerminalPanel: React.FC<TerminalPanelProps> = ({ onClose }) => {
+export const TerminalPanel: React.FC<TerminalPanelProps> = ({ onClose, onSelectDiagnostic }) => {
   const {
     buildOutput,
     setBuildOutput,
+    lastBuildResult,
     serialConnected,
   } = useSimulation();
 
   const [activeTab, setActiveTab] = useState<TerminalTabType>("output");
   const [extraTabs, setExtraTabs] = useState<TabDef[]>([]);
 
+  // Automatically switch to Issues tab if build failed
+  useEffect(() => {
+    if (lastBuildResult && lastBuildResult.status === 'failed' && lastBuildResult.diagnostics.length > 0) {
+      setActiveTab("issues");
+    }
+  }, [lastBuildResult]);
+
   const tabs: TabDef[] = [
     { id: "output", label: "Output", icon: <Terminal size={14} /> },
+    { id: "issues", label: "Issues", icon: <AlertCircle size={14} /> },
     { id: "serial", label: "Serial", icon: <Activity size={14} /> },
     ...extraTabs,
   ];
@@ -57,6 +70,21 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({ onClose }) => {
             showInput={true}
             placeholder="Command..."
             onInputSubmit={(val) => console.log("Terminal Command:", val)}
+          />
+        );
+      case "issues":
+        if (!lastBuildResult) {
+            return (
+                <div style={{ padding: "12px", color: COLORS.FOG, fontFamily: TYPOGRAPHY.CODE, fontSize: "12px" }}>
+                  No build results available.
+                </div>
+            );
+        }
+        return (
+          <BuildDiagnosticsView
+            result={lastBuildResult}
+            onShowRaw={() => setActiveTab("output")}
+            onSelectDiagnostic={onSelectDiagnostic}
           />
         );
       case "serial":

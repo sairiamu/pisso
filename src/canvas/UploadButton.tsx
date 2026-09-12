@@ -2,11 +2,13 @@ import React, { useState } from "react";
 import { Upload } from "lucide-react";
 import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
-import { writeSketch } from "../domain/sketch-generator";
 import { FileEntry } from "../App";
 import { BoardInfo } from "../domain/models";
 import { ProjectManager } from "../application/ProjectManager";
 import { CompilerService } from "../application/compiler-service";
+import { BuildManager } from "../application/BuildManager";
+import { getBoardByFqbn } from "../domain/boards";
+import { Project, ProjectFile } from "../domain/models";
 
 interface UploadButtonProps {
   projectPath: string | null;
@@ -15,6 +17,7 @@ interface UploadButtonProps {
   files: FileEntry[];
   onCompileSuccess?: (hex: string) => void;
   onOutput?: (output: string | null) => void;
+  onBuildResult?: (result: BuildResult | null) => void;
   onUploadSuccess?: () => void;
   boards: BoardInfo[];
   selectedBoardId: string | null;
@@ -28,6 +31,7 @@ export const UploadButton: React.FC<UploadButtonProps> = ({
   files,
   onCompileSuccess,
   onOutput,
+  onBuildResult,
   onUploadSuccess,
   boards,
   selectedBoardId,
@@ -41,6 +45,7 @@ export const UploadButton: React.FC<UploadButtonProps> = ({
     if (isProcessing) return;
 
     onOutput?.(null); // Clear previous output
+    onBuildResult?.(null);
 
     if (boards.length === 0) {
       onOutput?.("Error: No board found in your design. Add an Arduino board to the canvas before uploading.");
@@ -58,13 +63,19 @@ export const UploadButton: React.FC<UploadButtonProps> = ({
       return;
     }
 
+    const boardDef = getBoardByFqbn(board.fqbn);
+    if (!boardDef) {
+      onOutput?.(`Error: Unknown board configuration for ${board.fqbn}`);
+      return;
+    }
+
     if (!selectedPort) {
       onOutput?.("Error: No serial port selected. Please select a port from the dropdown menu in the top bar.");
       return;
     }
 
     setIsProcessing(true);
-    onOutput?.(`Preparing upload to ${board.label} on ${selectedPort}...`);
+    onOutput?.(`Preparing upload to ${boardDef.name} on ${selectedPort}...`);
 
     try {
       let activePath = projectPath;
@@ -81,20 +92,25 @@ export const UploadButton: React.FC<UploadButtonProps> = ({
       if (!hasHex) {
         onOutput?.("No compiled hex found. Compiling project first...");
 
-        const projectFiles = files.map(file => ({
-            name: file.name,
-            content: file.name.endsWith(".ino") ? writeSketch(file.content) : file.content
-        }));
+        const buildProject: any = {
+          rootPath: activePath,
+          files: files as ProjectFile[],
+          circuit: { components: [], connections: [], nets: [], version: 1 }
+        };
 
-        const result = await CompilerService.compile(
-          activePath,
-          projectFiles,
-          board.fqbn,
-          mainSketch.name
-        );
+        const buildResult = await BuildManager.build(buildProject, board.fqbn);
+        onBuildResult?.(buildResult);
 
-        onOutput?.(`Compilation successful. (Flash: ${result.flash_used} bytes, RAM: ${result.ram_used} bytes)`);
-        onCompileSuccess?.(result.hex);
+        if (buildResult.status !== 'success') {
+          onOutput?.(`COMPILATION FAILED: ${buildResult.output}`);
+          setIsProcessing(false);
+          return;
+        }
+
+        onOutput?.(`Compilation successful. (Flash: ${buildResult.flashUsed} bytes, RAM: ${buildResult.ramUsed} bytes)`);
+        if (buildResult.hex) {
+          onCompileSuccess?.(buildResult.hex);
+        }
       }
 
       // 2. Upload
@@ -102,13 +118,13 @@ export const UploadButton: React.FC<UploadButtonProps> = ({
       const uploadResult = await CompilerService.upload(
         hexPath,
         selectedPort,
-        board.fqbn
+        boardDef
       );
 
       onOutput?.(`VERIFICATION SUCCESS: ${uploadResult}`);
       onOutput?.("Your board should be running the new code.");
       if (setDebugStatus) {
-        setDebugStatus(`Upload complete — flashed to ${board.label}`);
+        setDebugStatus(`Upload complete — flashed to ${boardDef.name}`);
         setTimeout(() => setDebugStatus(""), 4000);
       }
       onUploadSuccess?.();

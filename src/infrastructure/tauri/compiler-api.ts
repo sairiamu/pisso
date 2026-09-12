@@ -1,9 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 
 export interface CompileResult {
+  success: boolean;
   hex: string;
   flash_used: number;
   ram_used: number;
+  stdout: string;
+  stderr: string;
 }
 
 export const CompilerApi = {

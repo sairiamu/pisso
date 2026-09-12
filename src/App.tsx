@@ -19,6 +19,7 @@ import { ComponentLab } from "./components/Showcase";
 import { X, AlertTriangle } from "lucide-react";
 import { COLORS } from "./CONSTANTS/colors";
 import { SystemApi } from "./infrastructure/tauri/system-api";
+import { Diagnostic } from "./domain/models";
 
 export interface FileEntry {
   name: string;
@@ -85,7 +86,7 @@ function App() {
     { name: "sketch.ino", content: INITIAL_CODE }
   ]);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
-  const { isSimulating, setIsSimulating, appendBuildOutput } = useSimulation();
+  const { isSimulating, setIsSimulating, appendBuildOutput, setLastBuildResult, lastBuildResult } = useSimulation();
   const { circuit, setCircuit, addComponent, clearCircuit } = useCircuit();
   const [lastHex, setLastHex] = useState<string | null>(null);
   const [mode, setMode] = useState<AppMode>("design");
@@ -95,6 +96,7 @@ function App() {
   const [boards, setBoards] = useState<BoardInfo[]>([]);
   const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
   const [isClosingDirty, setIsClosingDirty] = useState(false);
+  const [editorLocation, setEditorLocation] = useState<{ line: number; column?: number } | undefined>(undefined);
   const canvasRef = useRef<CanvasShellHandle>(null);
 
   const lastSavedState = useRef<{ circuit: string, files: string }>({ circuit: '', files: '' });
@@ -338,6 +340,24 @@ function App() {
     setTimeout(() => setDebugStatus(""), 2000);
   }, [circuit.components.length, addComponent]);
 
+  const handleSelectDiagnostic = useCallback((diag: Diagnostic) => {
+    if (!diag.file || !diag.line) return;
+
+    // 1. Find the file index
+    const fileName = diag.file.split(/[/\\]/).pop();
+    const index = files.findIndex(f => f.name === fileName);
+
+    if (index !== -1) {
+      setActiveFileIndex(index);
+      setEditorLocation({ line: diag.line, column: diag.column });
+      setView("workspace");
+      setMode("code");
+
+      // Clear location after a short delay so clicking the same error again triggers a re-scroll
+      setTimeout(() => setEditorLocation(undefined), 100);
+    }
+  }, [files]);
+
   if (status === "error") {
     return (
       <div style={{
@@ -423,6 +443,7 @@ function App() {
       onOpenProject={handleOpen}
       onSaveProject={handleSave}
       onCloseProject={handleCloseProject}
+      onSelectDiagnostic={handleSelectDiagnostic}
       saveDisabled={status === "saving" || status === "loading" || status === "ready"}
       lastHex={lastHex}
       isSimulating={isSimulating}
@@ -699,13 +720,23 @@ function App() {
           onAddTab={handleAddTab}
           onCloseTab={handleCloseTab}
           onOutput={appendBuildOutput}
+          onBuildResult={setLastBuildResult}
           onCompileSuccess={setLastHex}
           onProjectPathChange={setProjectPath}
           boards={boards}
           selectedBoardId={selectedBoardId}
         />
         <div style={{ flex: 1, minHeight: 0 }}>
-          <CodeEditor value={activeFile.content} onChange={handleCodeChange} />
+          <CodeEditor
+            value={activeFile.content}
+            onChange={handleCodeChange}
+            selectedLocation={editorLocation}
+            diagnostics={lastBuildResult?.diagnostics.filter(d => {
+              if (!d.file) return false;
+              const fileName = d.file.split(/[/\\]/).pop();
+              return fileName === activeFile.name;
+            })}
+          />
         </div>
       </div>
     </AppShell>

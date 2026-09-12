@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { PinState } from './engine';
+import { BuildResult } from '../domain/models';
 
 interface SimulationContextType {
   isSimulating: boolean;
@@ -7,12 +8,14 @@ interface SimulationContextType {
   pinMappings: Record<string, (string | number)[]>; // Maps "partId:pin" to Arduino pins
   serialOutput: string;
   buildOutput: string | null;
+  lastBuildResult: BuildResult | null;
   serialConnected: boolean;
   serialSource: 'simulation' | 'hardware';
   setPinState: (pin: string | number, state: PinState) => void;
   appendSerialOutput: (text: string) => void;
   clearSerialOutput: () => void;
   setBuildOutput: (text: string | null) => void;
+  setLastBuildResult: (result: BuildResult | null) => void;
   appendBuildOutput: (text: string | null) => void;
   setSerialConnected: (connected: boolean) => void;
   setSerialSource: (source: 'simulation' | 'hardware') => void;
@@ -31,6 +34,7 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [pinMappings, setPinMappings] = useState<Record<string, (string | number)[]>>({});
   const [serialOutput, setSerialOutput] = useState('');
   const [buildOutput, setBuildOutput] = useState<string | null>(null);
+  const [lastBuildResult, setLastBuildResult] = useState<BuildResult | null>(null);
   const [serialConnected, setSerialConnected] = useState(false);
   const [serialSource, setSerialSource] = useState<'simulation' | 'hardware'>('simulation');
   const [writeSerialHandler, setWriteSerialHandler] = useState<(data: string) => void>(() => () => {});
@@ -75,12 +79,14 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         pinMappings,
         serialOutput,
         buildOutput,
+        lastBuildResult,
         serialConnected,
         serialSource,
         setPinState,
         appendSerialOutput,
         clearSerialOutput,
         setBuildOutput,
+        setLastBuildResult,
         appendBuildOutput,
         setSerialConnected,
         setSerialSource,

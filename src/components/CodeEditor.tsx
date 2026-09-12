@@ -1,15 +1,19 @@
 import React, { useEffect, useRef } from "react";
-import { EditorState } from "@codemirror/state";
+import { EditorState, Compartment } from "@codemirror/state";
 import { EditorView, basicSetup } from "codemirror";
 import { cpp } from "@codemirror/lang-cpp";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { linter, Diagnostic as LinterDiagnostic } from "@codemirror/lint";
 import { tags as t } from "@lezer/highlight";
 import { EDITOR_CONFIG } from "../CONSTANTS/editor";
+import { Diagnostic } from "../domain/models";
 
 interface CodeEditorProps {
   value: string;
   onChange: (value: string) => void;
   className?: string;
+  selectedLocation?: { line: number; column?: number };
+  diagnostics?: Diagnostic[];
 }
 
 /**
@@ -75,9 +79,29 @@ const pissowHighlightStyle = HighlightStyle.define([
   { tag: [t.punctuation, t.separator, t.bracket], color: EDITOR_CONFIG.SYNTAX.PUNCTUATION },
 ]);
 
-export const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, className }) => {
+export const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, className, selectedLocation, diagnostics = [] }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const linterCompartment = useRef(new Compartment());
+
+  const getLinterExtension = (diags: Diagnostic[]) => {
+    return linter((view) => {
+      return diags.map(d => {
+        const line = d.line ? Math.max(1, Math.min(d.line, view.state.doc.lines)) : 1;
+        const lineInfo = view.state.doc.line(line);
+        const from = lineInfo.from + (d.column ? Math.max(0, Math.min(d.column - 1, lineInfo.length)) : 0);
+        const to = lineInfo.to;
+
+        return {
+          from,
+          to,
+          severity: d.severity === 'info' ? 'info' : d.severity,
+          message: d.message,
+          actions: []
+        } as LinterDiagnostic;
+      });
+    });
+  };
 
   useEffect(() => {
     if (!editorRef.current) return;
@@ -89,6 +113,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, classNa
         cpp(),
         pissowTheme,
         syntaxHighlighting(pissowHighlightStyle),
+        linterCompartment.current.of(getLinterExtension(diagnostics)),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             onChange(update.state.doc.toString());
@@ -117,6 +142,30 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, classNa
       });
     }
   }, [value]);
+
+  useEffect(() => {
+    if (viewRef.current) {
+      viewRef.current.dispatch({
+        effects: linterCompartment.current.reconfigure(getLinterExtension(diagnostics))
+      });
+    }
+  }, [diagnostics]);
+
+  useEffect(() => {
+    if (viewRef.current && selectedLocation) {
+      const { line, column = 1 } = selectedLocation;
+      try {
+        const pos = viewRef.current.state.doc.line(line).from + (column - 1);
+        viewRef.current.dispatch({
+          selection: { head: pos, anchor: pos },
+          scrollIntoView: true,
+        });
+        viewRef.current.focus();
+      } catch (e) {
+        console.warn("Failed to jump to location:", selectedLocation, e);
+      }
+    }
+  }, [selectedLocation]);
 
   return <div ref={editorRef} className={className} style={{ height: "100%", width: "100%" }} />;
 };

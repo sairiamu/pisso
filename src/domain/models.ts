@@ -157,6 +157,21 @@ export interface Diagnostic {
 }
 
 /**
+ * The result of a project build process.
+ */
+export interface BuildResult {
+  status: 'success' | 'failed' | 'error';
+  hex?: string;
+  flashUsed?: number;
+  ramUsed?: number;
+  stdout: string;
+  stderr: string;
+  output: string;
+  diagnostics: Diagnostic[];
+  timestamp: number;
+}
+
+/**
  * Summary information for a board used in selection UIs.
  */
 export interface BoardInfo {
@@ -164,4 +179,29 @@ export interface BoardInfo {
   type: string;
   label: string;
   fqbn: string;
+}
+
+/**
+ * Data-driven definition for a microcontroller board.
+ */
+export interface BoardDefinition {
+  id: string;
+  name: string;
+  fqbn: string;
+  architecture: string;
+  mcu: string;
+  clock: number; // in Hz
+  variant: string;
+  compilerFlags: string[];
+  upload: {
+    protocol: string;
+    speed: number;
+    requireReset?: boolean;
+    resetMethod?: 'none' | 'dtr' | 'rts' | '1200bps';
+  };
+  simulation: {
+    engine: string;
+    capabilities: string[];
+    pinMap?: Record<string | number, { port: string; bit: number }>;
+  };
 }

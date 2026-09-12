@@ -1,15 +1,17 @@
 import { SimulationEngine, PinState } from "../simulator/engine";
+import { BoardDefinition } from "../domain/models";
 
 export class SimulationService {
   private static engine: SimulationEngine | null = null;
 
   static start(
     hex: string,
+    board: BoardDefinition,
     onPinChange: (pin: string | number, state: PinState) => void,
     onUartByte: (byte: number) => void
   ) {
     this.stop();
-    this.engine = SimulationEngine.fromHex(hex);
+    this.engine = SimulationEngine.fromHex(hex, board);
     this.engine.onPinChange = onPinChange;
     this.engine.onUartByte = onUartByte;
     this.engine.start();
