@@ -286,7 +286,7 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
             if (unoConnections.length > 0) {
               mappings[`${comp.id}:${pinName}`] = unoConnections;
 
-              if (unoConnections.includes('0') || unoConnections.includes('1')) {
+              if (unoConnections.includes('D0') || unoConnections.includes('D1')) {
                 if (connectedPins.some(p => p.componentId !== unoComponent.id)) {
                   rxTxConnected = true;
                 }

@@ -8,9 +8,9 @@ export const SLIDE_SWITCH_DEFINITION: PartDefinition = {
   category: "Sensors",
   viewBox: { x: 0, y: 0, width: 45.36, height: 22.68 },
   pins: [
-    { name: "1", x: 7.56, y: 22.68 },
-    { name: "2", x: 22.68, y: 22.68 },
-    { name: "3", x: 37.8, y: 22.68 },
+    { name: "pin1", x: 7.56, y: 22.68 },
+    { name: "pin2", x: 22.68, y: 22.68 },
+    { name: "pin3", x: 37.8, y: 22.68 },
   ],
   defaultAttrs: {},
   render: ({ attrs }) => (

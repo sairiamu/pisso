@@ -8,8 +8,8 @@ export const PHOTORESISTOR_DEFINITION: PartDefinition = {
   category: "Sensors",
   viewBox: { x: 0, y: 0, width: 25, height: 25 },
   pins: [
-    { name: "1", x: 5, y: 25 },
-    { name: "2", x: 20, y: 25 },
+    { name: "pin1", x: 5, y: 25 },
+    { name: "pin2", x: 20, y: 25 },
   ],
   defaultAttrs: {},
   render: ({ attrs }) => (

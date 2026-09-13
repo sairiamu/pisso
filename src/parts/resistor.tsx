@@ -8,8 +8,8 @@ export const RESISTOR_DEFINITION: PartDefinition = {
   category: "Basic",
   viewBox: { x: 0, y: 0, width: 59.14, height: 11.34 },
   pins: [
-    { name: "1", x: 0, y: 5.65 },
-    { name: "2", x: 58.8, y: 5.65 },
+    { name: "pin1", x: 0, y: 5.65 },
+    { name: "pin2", x: 58.8, y: 5.65 },
   ],
   defaultAttrs: { value: "1000" },
   render: ({ attrs }) => (

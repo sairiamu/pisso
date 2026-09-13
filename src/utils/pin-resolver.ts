@@ -30,19 +30,31 @@ export function resolvePartPins(
   if (Array.isArray(pinInfo) && pinInfo.length > 0) {
     for (const p of pinInfo) {
       if (p && typeof p.x === 'number' && typeof p.y === 'number' && p.name) {
-        if (!seenNames.has(p.name)) {
-          // Validate finite
-          if (Number.isFinite(p.x) && Number.isFinite(p.y)) {
-             // 5. Never render handles with coordinates far outside the component.
-             // We allow a reasonable margin (50px) because some pins stick out.
-             const margin = 50;
-             if (p.x >= -margin && p.x <= naturalWidth + margin &&
-                 p.y >= -margin && p.y <= naturalHeight + margin) {
-               seenNames.add(p.name);
-               resolvedPins.push({ name: p.name, x: p.x, y: p.y });
-             } else {
-               console.warn(`[Pisso] Wokwi pinInfo for ${definition.type}:${p.name} is far out of bounds: (${p.x}, ${p.y}) for size ${naturalWidth}x${naturalHeight}`);
-             }
+        // Validate finite
+        if (Number.isFinite(p.x) && Number.isFinite(p.y)) {
+          // 5. Never render handles with coordinates far outside the component.
+          // We allow a reasonable margin (50px) because some pins stick out.
+          const margin = 50;
+          if (p.x >= -margin && p.x <= naturalWidth + margin &&
+              p.y >= -margin && p.y <= naturalHeight + margin) {
+
+            let finalName = p.name;
+            // 6. Prefer canonical name from Registry if coordinates match exactly.
+            if (definition.pins) {
+              const match = definition.pins.find(dp => {
+                const dpx = typeof dp.x === 'string' ? parseFloat(dp.x) : dp.x;
+                const dpy = typeof dp.y === 'string' ? parseFloat(dp.y) : dp.y;
+                return Math.abs(dpx - p.x) < 0.1 && Math.abs(dpy - p.y) < 0.1;
+              });
+              if (match) finalName = match.name;
+            }
+
+            if (!seenNames.has(finalName)) {
+              seenNames.add(finalName);
+              resolvedPins.push({ name: finalName, x: p.x, y: p.y });
+            }
+          } else {
+            console.warn(`[Pisso] Wokwi pinInfo for ${definition.type}:${p.name} is far out of bounds: (${p.x}, ${p.y}) for size ${naturalWidth}x${naturalHeight}`);
           }
         }
       }

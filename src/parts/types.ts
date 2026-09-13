@@ -1,9 +1,13 @@
 import React from "react";
 
+export type PinType = 'io' | 'input' | 'output' | 'power' | 'ground' | 'analog';
+
 export interface PinDefinition {
   name: string;
   x: number | string;
   y: number | string;
+  type?: PinType;
+  required?: boolean;
 }
 
 export interface PartDefinition {

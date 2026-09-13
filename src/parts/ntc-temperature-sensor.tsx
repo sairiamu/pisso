@@ -8,8 +8,8 @@ export const NTC_TEMPERATURE_SENSOR_DEFINITION: PartDefinition = {
   category: "Sensors",
   viewBox: { x: 0, y: 0, width: 10, height: 10 },
   pins: [
-    { name: "1", x: 2, y: 10 },
-    { name: "2", x: 8, y: 10 },
+    { name: "pin1", x: 2, y: 10 },
+    { name: "pin2", x: 8, y: 10 },
   ],
   defaultAttrs: {},
   render: ({ attrs }) => (

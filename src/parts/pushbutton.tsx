@@ -8,10 +8,10 @@ export const PUSHBUTTON_DEFINITION: PartDefinition = {
   category: "Basic",
   viewBox: { x: 0, y: 0, width: 68.04, height: 45.36 },
   pins: [
-    { name: "1.l", x: 0, y: 13 },
-    { name: "2.l", x: 0, y: 32 },
-    { name: "1.r", x: 67, y: 13 },
-    { name: "2.r", x: 67, y: 32 },
+    { name: "1.L", x: 0, y: 13 },
+    { name: "2.L", x: 0, y: 32 },
+    { name: "1.R", x: 67, y: 13 },
+    { name: "2.R", x: 67, y: 32 },
   ],
   defaultAttrs: { color: "red" },
   render: ({ attrs }) => (

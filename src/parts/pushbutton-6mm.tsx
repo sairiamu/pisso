@@ -8,10 +8,10 @@ export const PUSHBUTTON_6MM_DEFINITION: PartDefinition = {
   category: "Sensors",
   viewBox: { x: 0, y: 0, width: 6, height: 6 },
   pins: [
-    { name: "1", x: 0, y: 1 },
-    { name: "2", x: 6, y: 1 },
-    { name: "3", x: 0, y: 5 },
-    { name: "4", x: 6, y: 5 },
+    { name: "pin1", x: 0, y: 1 },
+    { name: "pin2", x: 6, y: 1 },
+    { name: "pin3", x: 0, y: 5 },
+    { name: "pin4", x: 6, y: 5 },
   ],
   defaultAttrs: { color: "red" },
   render: ({ attrs }) => (

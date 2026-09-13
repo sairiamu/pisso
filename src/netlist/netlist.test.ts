@@ -1,53 +1,100 @@
-import { resolveNode } from "../domain/circuit-resolver";
-import { Circuit, PinReference } from "../domain/models";
+import { describe, it, expect } from "vitest";
+import { generateNetlist } from "./generator";
+import { Diagram } from "./types";
 
-const mockCircuit: Circuit = {
-  version: 1,
-  components: [
-    { id: "bb1", definitionId: "wokwi-breadboard", x: 0, y: 0, rotation: 0, attributes: {} },
-    { id: "uno1", definitionId: "wokwi-arduino-uno", x: 0, y: 0, rotation: 0, attributes: {} },
-    { id: "led1", definitionId: "wokwi-led", x: 0, y: 0, rotation: 0, attributes: {} }
-  ],
-  connections: [
-    {
-      id: "w1",
-      from: { componentId: "uno1", pinName: "13" },
-      to: { componentId: "bb1", pinName: "1a" }
-    },
-    {
-      id: "w2",
-      from: { componentId: "bb1", pinName: "1e" },
-      to: { componentId: "led1", pinName: "A" }
+describe("Netlist Generator", () => {
+  const mockDiagram: Diagram = {
+    version: 1,
+    parts: [
+      { id: "bb1", type: "wokwi-breadboard", x: 0, y: 0, rotation: 0, attrs: {} },
+      { id: "uno1", type: "wokwi-arduino-uno", x: 100, y: 100, rotation: 0, attrs: {} },
+      { id: "led1", type: "wokwi-led", x: 200, y: 200, rotation: 0, attrs: {} }
+    ],
+    connections: [
+      {
+        id: "w1",
+        from: { partId: "uno1", pin: "D13" },
+        to: { partId: "bb1", pin: "1a" }
+      },
+      {
+        id: "w2",
+        from: { partId: "bb1", pin: "1e" },
+        to: { partId: "led1", pin: "anode" }
+      }
+    ]
+  };
+
+  it("should identify breadboard row continuity", () => {
+    const nets = generateNetlist(mockDiagram);
+    const mainNet = nets.find(net => net.some(p => p.partId === "uno1" && p.pin === "D13"));
+
+    expect(mainNet).toBeDefined();
+
+    const expectedPins = [
+      { partId: "uno1", pin: "D13" },
+      { partId: "bb1", pin: "1a" },
+      { partId: "bb1", pin: "1b" },
+      { partId: "bb1", pin: "1c" },
+      { partId: "bb1", pin: "1d" },
+      { partId: "bb1", pin: "1e" },
+      { partId: "led1", pin: "anode" }
+    ];
+
+    for (const exp of expectedPins) {
+      expect(mainNet).toContainEqual(exp);
     }
-  ],
-  nets: []
-};
+  });
 
-function testContinuity() {
-  console.log("Running Netlist Tests...");
+  it("should be deterministic regardless of part/connection order", () => {
+    const scrambled: Diagram = {
+      ...mockDiagram,
+      parts: [...mockDiagram.parts].reverse(),
+      connections: [...mockDiagram.connections].reverse()
+    };
 
-  // Test 1: Same row continuity (1a should connect to 1e and thus to led1:A)
-  const startPin: PinReference = { componentId: "uno1", pinName: "13" };
-  const connected = resolveNode(mockCircuit, startPin);
+    const nets1 = generateNetlist(mockDiagram);
+    const nets2 = generateNetlist(scrambled);
 
-  const hasAnode = connected.some(p => p.componentId === "led1" && p.pinName === "A");
-  console.assert(hasAnode, "FAILED: pin 13 should be connected to led1:A via breadboard row 1");
+    expect(nets1).toEqual(nets2);
+  });
 
-  // Test 2: Power rail continuity
-  const railStart: PinReference = { componentId: "bb1", pinName: "tp.0" };
-  const railConnected = resolveNode(mockCircuit, railStart);
-  console.assert(railConnected.some(p => p.pinName === "tp.24"), "FAILED: tp.0 should connect to tp.24");
-  console.assert(!railConnected.some(p => p.pinName === "tg.0"), "FAILED: tp rail should NOT connect to tg rail");
+  it("should handle power rail continuity", () => {
+    const railDiagram: Diagram = {
+      version: 1,
+      parts: [
+        { id: "bb1", type: "wokwi-breadboard", x: 0, y: 0, rotation: 0, attrs: {} },
+        { id: "uno1", type: "wokwi-arduino-uno", x: 0, y: 0, rotation: 0, attrs: {} }
+      ],
+      connections: [
+        { id: "w1", from: { partId: "bb1", pin: "tp.0" }, to: { partId: "uno1", pin: "5V" } }
+      ]
+    };
 
-  // Test 3: Cross-row non-continuity
-  const row1: PinReference = { componentId: "bb1", pinName: "1a" };
-  const row1Connected = resolveNode(mockCircuit, row1);
-  console.assert(!row1Connected.some(p => p.pinName === "2a"), "FAILED: Row 1 should NOT connect to Row 2");
-  console.assert(!row1Connected.some(p => p.pinName === "1f"), "FAILED: Row 1a-e should NOT connect to Row 1f-j");
+    const nets = generateNetlist(railDiagram);
+    const railNet = nets.find(n => n.some(p => p.pin === "tp.0"));
 
-  console.log("All Netlist Tests Passed!");
-}
+    expect(railNet).toContainEqual({ partId: "bb1", pin: "tp.24" });
+    expect(railNet).not.toContainEqual({ partId: "bb1", pin: "tg.0" });
+  });
 
-// In a real environment, this would be run by a test runner.
-// For now, we export it.
-export const runTests = testContinuity;
+  it("should not connect different breadboard rows", () => {
+    const diagram: Diagram = {
+      version: 1,
+      parts: [
+        { id: "bb1", type: "wokwi-breadboard", x: 0, y: 0, rotation: 0, attrs: {} },
+        { id: "uno1", type: "wokwi-arduino-uno", x: 0, y: 0, rotation: 0, attrs: {} }
+      ],
+      connections: [
+        { id: "w1", from: { partId: "bb1", pin: "1a" }, to: { partId: "uno1", pin: "D1" } },
+        { id: "w2", from: { partId: "bb1", pin: "2a" }, to: { partId: "uno1", pin: "D2" } }
+      ]
+    };
+
+    const nets = generateNetlist(diagram);
+    const net1 = nets.find(n => n.some(p => p.pin === "1a"));
+    const net2 = nets.find(n => n.some(p => p.pin === "2a"));
+
+    expect(net1).not.toEqual(net2);
+    expect(net1).not.toContainEqual({ partId: "bb1", pin: "2a" });
+  });
+});
