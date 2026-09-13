@@ -1,10 +1,10 @@
 import React, { useState } from "react";
 import { COLORS } from "../CONSTANTS/colors";
 import { FileEntry } from "../App";
-import { BoardInfo } from "../domain/models";
+import { BoardInfo, BuildResult, Project, ProjectFile } from "../domain/models";
 import { ProjectManager } from "../application/ProjectManager";
 import { BuildManager } from "../application/BuildManager";
-import { Project, ProjectFile } from "../domain/models";
+import { LibraryManager } from "../application/LibraryManager";
 
 interface RunButtonProps {
   projectPath: string | null;
@@ -13,6 +13,7 @@ interface RunButtonProps {
   onBuildResult?: (result: BuildResult | null) => void;
   onCompileSuccess?: (hex: string) => void;
   onProjectPathChange?: (path: string) => void;
+  autoInstallDependencies?: boolean;
   boards: BoardInfo[];
   selectedBoardId: string | null;
 }
@@ -28,6 +29,7 @@ export const RunButton: React.FC<RunButtonProps> = ({
   onBuildResult,
   onCompileSuccess,
   onProjectPathChange,
+  autoInstallDependencies = false,
   boards,
   selectedBoardId,
 }) => {
@@ -93,7 +95,7 @@ export const RunButton: React.FC<RunButtonProps> = ({
       };
 
       // 2. Invoke the BuildManager
-      const result = await BuildManager.build(buildProject as Project, board.fqbn);
+      const result = await BuildManager.build(buildProject as Project, board.fqbn, autoInstallDependencies);
       onBuildResult?.(result);
 
       if (result.status === 'success') {

@@ -154,6 +154,12 @@ export interface Diagnostic {
   line?: number;
   column?: number;
   code?: string;
+  // Library-specific diagnostic fields
+  library?: string;
+  stage?: string;
+  reason?: string;
+  details?: string;
+  suggestion?: string;
 }
 
 /**

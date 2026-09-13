@@ -51,12 +51,13 @@ describe('ProjectManager', () => {
   });
 
   it('should save a project at its current path', async () => {
-    const state = {
+    const state: any = {
       path: '/path/to/project',
       name: 'Test Project',
       files: [{ name: 'sketch.ino', content: 'void setup() {}' }],
       circuit: { version: 1, components: [], connections: [], nets: [] },
-      activeFileIndex: 0
+      activeFileIndex: 0,
+      status: 'ready'
     };
 
     const saved = await ProjectManager.save(state);
@@ -69,12 +70,13 @@ describe('ProjectManager', () => {
 
   it('should saveAs to a new path', async () => {
     vi.mocked(SystemApi.openDirectoryDialog).mockResolvedValue('/new/path');
-    const state = {
+    const state: any = {
       path: '/old/path',
       name: 'old',
       files: [],
       circuit: { version: 1, components: [], connections: [], nets: [] },
-      activeFileIndex: 0
+      activeFileIndex: 0,
+      status: 'ready'
     };
 
     const newState = await ProjectManager.saveAs(state);

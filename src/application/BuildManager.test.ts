@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BuildManager, BuildableProject } from './BuildManager';
 import { CompilerService } from './compiler-service';
-import { ProjectService } from './project-service';
-import { ARDUINO_UNO } from '../domain/boards';
 import { ProjectFile } from '../domain/models';
 
 vi.mock('./compiler-service');
@@ -66,9 +64,12 @@ int add(int a, int b) {
     };
 
     vi.mocked(CompilerService.compile).mockResolvedValue({
+      success: true,
       hex: ':100000000C9435000C945D000C945D000C945D00D4',
       flash_used: 1024,
-      ram_used: 128
+      ram_used: 128,
+      stdout: 'Compilation successful',
+      stderr: ''
     });
 
     const result = await BuildManager.build(project);

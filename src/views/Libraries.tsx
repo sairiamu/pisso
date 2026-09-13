@@ -1,64 +1,101 @@
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { Package, Trash2, Search, FileArchive, Info, Check, Globe, RefreshCw } from "lucide-react";
-import { LibraryService, OnlineLibraryEntry } from "../application/library-service";
-import { LibraryCatalogEntry } from "../infrastructure/tauri/library-api";
+import { LibraryManager, LibraryInfo } from "../application/LibraryManager";
 import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
+import { BoardInfo } from "../domain/models";
+import { getBoardByFqbn } from "../domain/boards";
+import { listen } from "@tauri-apps/api/event";
 
-export const LibrariesView: React.FC = () => {
+interface LibrariesViewProps {
+  projectPath?: string | null;
+  boards?: BoardInfo[];
+  selectedBoardId?: string | null;
+  autoInstallDependencies?: boolean;
+  onAutoInstallChange?: (auto: boolean) => void;
+}
+
+interface DownloadProgress {
+  status: string;
+  progress: number;
+  message: string;
+}
+
+export const LibrariesView: React.FC<LibrariesViewProps> = ({
+  projectPath,
+  boards,
+  selectedBoardId,
+  autoInstallDependencies = false,
+  onAutoInstallChange,
+}) => {
   const [activeTab, setActiveTab] = useState<"installed" | "available">("installed");
-  const [installedLibs, setInstalledLibs] = useState<string[]>([]);
-  const [catalog, setCatalog] = useState<LibraryCatalogEntry[]>([]);
-  const [onlineCatalog, setOnlineCatalog] = useState<OnlineLibraryEntry[]>([]);
+  const [allLibraries, setAllLibraries] = useState<LibraryInfo[]>([]);
   const [isOnline, setIsOnline] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
+  const [message, setMessage] = useState<{ text: React.ReactNode; isError: boolean } | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
 
   const fetchLibraries = async () => {
     setLoading(true);
+    setIsRefreshing(true);
     try {
-      const [installed, fullCatalog] = await Promise.all([
-        LibraryService.getInstalledLibraries(),
-        LibraryService.getLibraryCatalog(),
-      ]);
-      setInstalledLibs(installed);
-      setCatalog(fullCatalog);
+      const all = await LibraryManager.search("", projectPath);
+      setAllLibraries(all);
+      setIsOnline(all.some(l => l.source === 'online'));
     } catch (err) {
-      console.error("Failed to fetch local libraries:", err);
+      console.error("Failed to fetch libraries:", err);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
-  const fetchOnlineIndex = useCallback(async () => {
-    setIsRefreshing(true);
-    try {
-      const data = await LibraryService.fetchOnlineIndex();
-      setOnlineCatalog(data);
-      setIsOnline(true);
-    } catch (err) {
-      console.error("Online index fetch failed:", err);
-      setIsOnline(false);
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, []);
-
   useEffect(() => {
     fetchLibraries();
-    fetchOnlineIndex();
-  }, [fetchOnlineIndex]);
+  }, [projectPath]);
+
+  useEffect(() => {
+    const unlisten = listen<DownloadProgress>("library-download-progress", (event) => {
+      setDownloadProgress(event.payload);
+      if (event.payload.status === "completed") {
+        setTimeout(() => setDownloadProgress(null), 2000);
+      }
+    });
+
+    return () => {
+      unlisten.then(f => f());
+    };
+  }, []);
 
   const showMessage = (text: string, isError: boolean = false) => {
-    setMessage({ text, isError });
-    setTimeout(() => setMessage(null), 3000);
+    let content: React.ReactNode = text;
+    if (isError) {
+      try {
+        const diagnostic = JSON.parse(text);
+        if (diagnostic && diagnostic.type) {
+          content = (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ fontWeight: 700 }}>{diagnostic.type.replace('_', ' ')}</div>
+              <div style={{ fontSize: '13px' }}>
+                <span style={{ opacity: 0.7 }}>File:</span> {diagnostic.file}
+              </div>
+              <div style={{ fontSize: '13px' }}>
+                <span style={{ opacity: 0.7 }}>Error:</span> {diagnostic.message}
+              </div>
+            </div>
+          );
+        }
+      } catch (e) {}
+    }
+    setMessage({ text: content as any, isError });
+    setTimeout(() => setMessage(null), 5000); // Errors might need more time to read
   };
 
   const handleRemove = async (name: string) => {
     try {
-      await LibraryService.removeLibrary(name);
+      await LibraryManager.remove(name, projectPath);
       showMessage(`Library "${name}" removed.`);
       fetchLibraries();
     } catch (err) {
@@ -66,10 +103,21 @@ export const LibrariesView: React.FC = () => {
     }
   };
 
-  const handleInstallBundled = async (name: string) => {
+  const handleInstall = async (lib: LibraryInfo) => {
     try {
-      await LibraryService.installBundledLibrary(name);
-      showMessage(`Library "${name}" installed.`);
+      showMessage(lib.source === 'online' ? `Downloading ${lib.name}...` : `Installing ${lib.name}...`);
+
+      let targetArch: string | undefined;
+      if (selectedBoardId && boards) {
+        const boardInfo = boards.find(b => b.id === selectedBoardId);
+        if (boardInfo) {
+          const def = getBoardByFqbn(boardInfo.fqbn);
+          targetArch = def?.architecture;
+        }
+      }
+
+      const libName = await LibraryManager.install(lib, projectPath, targetArch);
+      showMessage(`Library "${libName}" and its dependencies installed successfully.`);
       fetchLibraries();
     } catch (err) {
       showMessage(`Failed to install library: ${err}`, true);
@@ -78,7 +126,7 @@ export const LibrariesView: React.FC = () => {
 
   const handleImportZip = async () => {
     try {
-      const libName = await LibraryService.importLibraryFromZip();
+      const libName = await LibraryManager.importFromZip(projectPath);
       if (libName) {
         showMessage(`Library "${libName}" imported successfully.`);
         fetchLibraries();
@@ -89,70 +137,30 @@ export const LibrariesView: React.FC = () => {
     }
   };
 
-  const handleInstallOnline = async (entry: OnlineLibraryEntry) => {
-    try {
-      showMessage(`Downloading ${entry.name}...`);
-      const libName = await LibraryService.downloadAndInstallLibrary(entry);
-      showMessage(`Library "${libName}" installed successfully.`);
-      fetchLibraries();
-    } catch (err) {
-      showMessage(`Failed to install online library: ${err}`, true);
-    }
-  };
-
-  const mergedAvailable = useMemo(() => {
-    const results: Array<OnlineLibraryEntry & { source: 'bundled' | 'online' }> = [];
-
-    // 1. Add entries from local catalog
-    catalog.forEach(c => {
-      if (c.bundled) {
-        // Genuinely bundled: no URL needed, use 'bundled' source
-        results.push({
-          ...c,
-          url: "",
-          source: 'bundled'
-        });
-      } else {
-        // Suggested but not bundled: try to match with online catalog to get URL
-        const onlineMatch = onlineCatalog.find(o => o.name.toLowerCase() === c.name.toLowerCase());
-        results.push({
-          ...(onlineMatch || c),
-          url: onlineMatch?.url || "",
-          source: 'online'
-        });
-      }
-    });
-
-    // 2. Add remaining online entries
-    onlineCatalog.forEach(o => {
-      if (!results.find(r => r.name.toLowerCase() === o.name.toLowerCase())) {
-        results.push({
-          ...o,
-          source: 'online'
-        });
-      }
-    });
-
-    return results;
-  }, [catalog, onlineCatalog]);
-
-  const filteredCatalog = useMemo(() => {
+  const filteredLibraries = useMemo(() => {
     const query = searchQuery.toLowerCase();
 
-    // Default view: show bundled libraries AND "featured" suggested libraries from local catalog
-    if (!query && activeTab === "available") {
-      const catalogNames = new Set(catalog.map(c => c.name.toLowerCase()));
-      return mergedAvailable.filter(l =>
-        l.source === 'bundled' || catalogNames.has(l.name.toLowerCase())
-      );
+    if (activeTab === "installed") {
+      return allLibraries.filter(l => l.installed && (
+        l.name.toLowerCase().includes(query) ||
+        l.author.toLowerCase().includes(query) ||
+        l.description.toLowerCase().includes(query)
+      ));
     }
 
-    return mergedAvailable.filter(lib =>
+    // Available tab
+    if (!query) {
+      // Default view: show bundled libraries AND "featured" suggested libraries
+      return allLibraries.filter(l => l.source === 'bundled' || (l.source === 'online' && !l.installed));
+    }
+
+    return allLibraries.filter(lib =>
       lib.name.toLowerCase().includes(query) ||
       lib.author.toLowerCase().includes(query) ||
       lib.description.toLowerCase().includes(query)
     );
-  }, [mergedAvailable, searchQuery, activeTab, catalog]);
+  }, [allLibraries, searchQuery, activeTab]);
+
 
   return (
     <div style={{
@@ -185,7 +193,7 @@ export const LibrariesView: React.FC = () => {
                 {isOnline ? <Globe size={12} /> : <Info size={12} />}
                 {isOnline ? "Online" : "Offline — showing local only"}
                 <button
-                  onClick={fetchOnlineIndex}
+                  onClick={fetchLibraries}
                   disabled={isRefreshing}
                   style={{
                     background: "none",
@@ -225,6 +233,60 @@ export const LibrariesView: React.FC = () => {
         </button>
       </div>
 
+      {projectPath && (
+        <div style={{
+          backgroundColor: COLORS.GRAPHITE_700,
+          border: `1px solid ${COLORS.GRAPHITE_500}`,
+          borderRadius: "8px",
+          padding: "12px 16px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between"
+        }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+            <div style={{ fontWeight: 600, fontSize: "14px" }}>Automatic Dependency Installation</div>
+            <div style={{ fontSize: "12px", color: COLORS.FOG }}>Automatically scan and install missing libraries when compiling.</div>
+          </div>
+          <label style={{
+            position: "relative",
+            display: "inline-block",
+            width: "44px",
+            height: "22px"
+          }}>
+            <input
+              type="checkbox"
+              checked={autoInstallDependencies}
+              onChange={(e) => onAutoInstallChange?.(e.target.checked)}
+              style={{ opacity: 0, width: 0, height: 0 }}
+            />
+            <span style={{
+              position: "absolute",
+              cursor: "pointer",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: autoInstallDependencies ? COLORS.SOLDER_COPPER : COLORS.GRAPHITE_500,
+              transition: ".4s",
+              borderRadius: "22px"
+            }}>
+              <span style={{
+                position: "absolute",
+                content: "",
+                height: "16px",
+                width: "16px",
+                left: "3px",
+                bottom: "3px",
+                backgroundColor: "white",
+                transition: ".4s",
+                borderRadius: "50%",
+                transform: autoInstallDependencies ? "translateX(22px)" : "none"
+              }} />
+            </span>
+          </label>
+        </div>
+      )}
+
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
@@ -239,6 +301,36 @@ export const LibrariesView: React.FC = () => {
           fontSize: "14px"
         }}>
           {message.text}
+        </div>
+      )}
+
+      {downloadProgress && (
+        <div style={{
+          padding: "16px",
+          borderRadius: "8px",
+          backgroundColor: COLORS.GRAPHITE_700,
+          border: `1px solid ${COLORS.SOLDER_COPPER}`,
+          display: "flex",
+          flexDirection: "column",
+          gap: "8px"
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "14px" }}>
+            <span style={{ color: COLORS.WARM_WHITE, fontWeight: 600 }}>{downloadProgress.message}</span>
+            <span style={{ color: COLORS.FOG }}>{Math.round(downloadProgress.progress * 100)}%</span>
+          </div>
+          <div style={{
+            height: "8px",
+            backgroundColor: COLORS.GRAPHITE_900,
+            borderRadius: "4px",
+            overflow: "hidden"
+          }}>
+            <div style={{
+              height: "100%",
+              width: `${downloadProgress.progress * 100}%`,
+              backgroundColor: COLORS.SOLDER_COPPER,
+              transition: "width 0.2s ease-out"
+            }} />
+          </div>
         </div>
       )}
 
@@ -300,133 +392,126 @@ export const LibrariesView: React.FC = () => {
         <div style={{ color: COLORS.FOG }}>Loading libraries...</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {activeTab === "installed" ? (
-            installedLibs.length === 0 ? (
-              <div style={{
+          {filteredLibraries.length === 0 ? (
+            <div style={{
+              backgroundColor: COLORS.GRAPHITE_700,
+              border: `1px solid ${COLORS.GRAPHITE_500}`,
+              borderRadius: "12px",
+              padding: "60px 40px",
+              textAlign: "center",
+              color: COLORS.FOG
+            }}>
+              <Package size={48} style={{ opacity: 0.3, marginBottom: "16px" }} />
+              <div>{activeTab === "installed" ? "No libraries installed." : "No results found."}</div>
+            </div>
+          ) : (
+            filteredLibraries.map(lib => (
+              <div key={lib.name} style={{
                 backgroundColor: COLORS.GRAPHITE_700,
                 border: `1px solid ${COLORS.GRAPHITE_500}`,
-                borderRadius: "12px",
-                padding: "60px 40px",
-                textAlign: "center",
-                color: COLORS.FOG
+                borderRadius: "10px",
+                padding: "20px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px"
               }}>
-                <Package size={48} style={{ opacity: 0.3, marginBottom: "16px" }} />
-                <div>No libraries installed.</div>
-              </div>
-            ) : (
-              installedLibs.map(lib => (
-                <div key={lib} style={{
-                  backgroundColor: COLORS.GRAPHITE_700,
-                  border: `1px solid ${COLORS.GRAPHITE_500}`,
-                  borderRadius: "10px",
-                  padding: "16px 20px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between"
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                    <div style={{ color: COLORS.SOLDER_COPPER }}><Package size={24} /></div>
-                    <div style={{ fontWeight: 600 }}>{lib}</div>
-                  </div>
-                  <button
-                    onClick={() => handleRemove(lib)}
-                    style={{
-                      backgroundColor: "transparent",
-                      color: COLORS.FOG,
-                      border: "none",
-                      cursor: "pointer",
-                      padding: "8px"
-                    }}
-                    title="Remove Library"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                </div>
-              ))
-            )
-          ) : (
-            filteredCatalog.length === 0 ? (
-              <div style={{ textAlign: "center", color: COLORS.FOG, padding: "40px" }}>No results found.</div>
-            ) : (
-              filteredCatalog.map(lib => {
-                const isInstalled = installedLibs.includes(lib.name);
-                return (
-                  <div key={lib.name} style={{
-                    backgroundColor: COLORS.GRAPHITE_700,
-                    border: `1px solid ${COLORS.GRAPHITE_500}`,
-                    borderRadius: "10px",
-                    padding: "20px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "8px"
-                  }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <div style={{ fontWeight: 600, fontSize: "16px", color: COLORS.WARM_WHITE }}>{lib.name}</div>
-                          <div style={{
-                            fontSize: "10px",
-                            padding: "2px 6px",
-                            borderRadius: "4px",
-                            backgroundColor: COLORS.GRAPHITE_900,
-                            color: lib.source === 'bundled' ? COLORS.SOLDER_COPPER : COLORS.FOG,
-                            border: `1px solid ${COLORS.GRAPHITE_500}`,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.5px"
-                          }}>
-                            {lib.source}
-                          </div>
-                        </div>
-                        <div style={{ fontSize: "12px", color: COLORS.FOG }}>by {lib.author} | v{lib.version}</div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <div style={{ fontWeight: 600, fontSize: "16px", color: COLORS.WARM_WHITE }}>{lib.name}</div>
+                      <div style={{
+                        fontSize: "10px",
+                        padding: "2px 6px",
+                        borderRadius: "4px",
+                        backgroundColor: COLORS.GRAPHITE_900,
+                        color: lib.source === 'bundled' ? COLORS.SOLDER_COPPER : (lib.source === 'project' ? COLORS.TRACE_GREEN : COLORS.FOG),
+                        border: `1px solid ${COLORS.GRAPHITE_500}`,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.5px"
+                      }}>
+                        {lib.source}
                       </div>
-                      {isInstalled ? (
+                    </div>
+                    <div style={{ fontSize: "12px", color: COLORS.FOG }}>by {lib.author} | v{lib.version}</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    {lib.installed ? (
+                      <>
                         <div style={{ color: COLORS.FOG, fontSize: "14px", display: "flex", alignItems: "center", gap: "6px" }}>
                           <Check size={16} color={COLORS.TRACE_GREEN} />
                           Installed
                         </div>
-                      ) : lib.source === 'bundled' ? (
                         <button
-                          onClick={() => handleInstallBundled(lib.name)}
+                          onClick={() => handleRemove(lib.name)}
                           style={{
-                            backgroundColor: COLORS.GRAPHITE_900,
-                            color: COLORS.SOLDER_COPPER,
-                            border: `1px solid ${COLORS.SOLDER_COPPER}`,
-                            padding: "6px 16px",
-                            borderRadius: "6px",
-                            cursor: "pointer",
-                            fontSize: "12px",
-                            fontWeight: 600
-                          }}
-                        >
-                          Install
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleInstallOnline(lib)}
-                          disabled={lib.source === 'online' && !lib.url}
-                          style={{
-                            backgroundColor: (lib.source === 'online' && !lib.url) ? COLORS.GRAPHITE_500 : COLORS.SOLDER_COPPER,
-                            color: (lib.source === 'online' && !lib.url) ? COLORS.FOG : COLORS.WARM_WHITE,
+                            backgroundColor: "transparent",
+                            color: COLORS.FOG,
                             border: "none",
-                            padding: "6px 16px",
-                            borderRadius: "6px",
-                            cursor: (lib.source === 'online' && !lib.url) ? "not-allowed" : "pointer",
-                            fontSize: "12px",
-                            fontWeight: 600,
-                            opacity: (lib.source === 'online' && !lib.url) ? 0.7 : 1
+                            cursor: "pointer",
+                            padding: "8px"
                           }}
+                          title="Remove Library"
                         >
-                          {lib.source === 'online' && !lib.url ? "Offline" : "Download & Install"}
+                          <Trash2 size={18} />
                         </button>
-                      )}
-                    </div>
-                    <div style={{ color: COLORS.FOG, fontSize: "14px", lineHeight: "1.4" }}>
-                      {lib.description}
-                    </div>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => handleInstall(lib)}
+                        disabled={lib.source === 'online' && !lib.url}
+                        style={{
+                          backgroundColor: (lib.source === 'online' && !lib.url) ? COLORS.GRAPHITE_500 : COLORS.SOLDER_COPPER,
+                          color: (lib.source === 'online' && !lib.url) ? COLORS.FOG : COLORS.WARM_WHITE,
+                          border: "none",
+                          padding: "6px 16px",
+                          borderRadius: "6px",
+                          cursor: (lib.source === 'online' && !lib.url) ? "not-allowed" : "pointer",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          opacity: (lib.source === 'online' && !lib.url) ? 0.7 : 1
+                        }}
+                      >
+                        {lib.source === 'bundled' ? "Install" : (lib.source === 'online' && !lib.url ? "Offline" : "Download & Install")}
+                      </button>
+                    )}
                   </div>
-                );
-              })
-            )
+                </div>
+                <div style={{ color: COLORS.FOG, fontSize: "14px", lineHeight: "1.4" }}>
+                  {lib.description}
+                  {lib.paragraph && (
+                    <div style={{ marginTop: "8px", fontSize: "13px", opacity: 0.8 }}>
+                      {lib.paragraph}
+                    </div>
+                  )}
+                </div>
+
+                {(lib.maintainer || lib.category || lib.architectures) && (
+                  <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginTop: "4px" }}>
+                    {lib.maintainer && (
+                       <div style={{ fontSize: "11px", color: COLORS.FOG }}>
+                         <span style={{ opacity: 0.6 }}>Maintainer:</span> {lib.maintainer}
+                       </div>
+                    )}
+                    {lib.category && (
+                       <div style={{ fontSize: "11px", color: COLORS.FOG }}>
+                         <span style={{ opacity: 0.6 }}>Category:</span> {lib.category}
+                       </div>
+                    )}
+                    {lib.architectures && (
+                       <div style={{ fontSize: "11px", color: COLORS.FOG }}>
+                         <span style={{ opacity: 0.6 }}>Archs:</span> {lib.architectures}
+                       </div>
+                    )}
+                  </div>
+                )}
+
+                {lib.dependencies && lib.dependencies.length > 0 && (
+                  <div style={{ marginTop: "4px", fontSize: "11px", color: COLORS.SOLDER_COPPER }}>
+                    <span style={{ opacity: 0.8 }}>Depends on:</span> {lib.dependencies.join(", ")}
+                  </div>
+                )}
+              </div>
+            ))
           )}
         </div>
       )}

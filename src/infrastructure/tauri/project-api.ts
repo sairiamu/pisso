@@ -1,5 +1,4 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Diagram } from "../../domain/diagram";
 
 export interface ProjectFile {
   name: string;
@@ -65,5 +64,9 @@ export const ProjectApi = {
 
   deleteProject: async (projectPath: string): Promise<void> => {
     await invoke("delete_project", { projectPath });
+  },
+
+  scanMissingHeaders: async (projectPath: string, boardFqbn: string): Promise<string[]> => {
+    return await invoke<string[]>("scan_missing_headers", { projectPath, boardFqbn });
   }
 };

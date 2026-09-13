@@ -3,7 +3,7 @@ import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
 import { Label } from "./Label";
 
-interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'prefix'> {
+interface InputProps extends Omit<React.ComponentPropsWithoutRef<'input'>, 'prefix'> {
   label?: string;
   hint?: string;
   error?: string;

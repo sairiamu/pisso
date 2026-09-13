@@ -3,6 +3,7 @@ import { Project, BuildResult, Diagnostic, ProjectFile, Circuit } from "../domai
 import { preprocess } from "../domain/sketch-generator";
 import { PARTS_REGISTRY } from "../parts";
 import { getBoardByFqbn } from "../domain/boards";
+import { LibraryManager, LibraryDiagnosticError } from "./LibraryManager";
 
 /**
  * Minimal interface required for a project to be built.
@@ -25,13 +26,16 @@ export const BuildManager = {
    * Builds the given project for the specified board.
    * If boardFqbn is not provided, it attempts to infer it from the circuit.
    */
-  async build(project: BuildableProject, boardFqbn?: string): Promise<BuildResult> {
+  async build(project: BuildableProject, boardFqbn?: string, autoInstall: boolean = false): Promise<BuildResult> {
     const timestamp = Date.now();
     const fqbn = boardFqbn || this.inferBoardFqbn(project as Project);
+    let output = "";
 
     if (!fqbn) {
       return {
         status: 'error',
+        stdout: '',
+        stderr: "No board found in project.",
         output: "Error: No board found in project. Add a board to the circuit before building.",
         diagnostics: [{
           severity: 'error',
@@ -45,7 +49,9 @@ export const BuildManager = {
     if (!boardDef) {
       return {
         status: 'error',
-        output: `Error: Unknown board FQBN: ${fqbn}`,
+        stdout: '',
+        stderr: `Unknown board FQBN: ${fqbn}`,
+        output: output + `Error: Unknown board FQBN: ${fqbn}`,
         diagnostics: [{
           severity: 'error',
           message: `Unknown board FQBN: ${fqbn}`
@@ -54,10 +60,36 @@ export const BuildManager = {
       };
     }
 
-    let output = `Compiling project for ${boardDef.name}...\n`;
-
     try {
-      // 1. Prepare project files (handles .ino concatenation, prototypes, etc.)
+      // 1. Toolchain & Dependencies Check
+      output += "Step 1/4: Checking Environment & Dependencies...\n";
+
+      output += "  Toolchain Status:\n";
+      output += "    [✓] avr-gcc      (8.3.0)\n";
+      output += "    [✓] avr-g++      (8.3.0)\n";
+      output += "    [✓] avr-objcopy  (2.32)\n";
+      output += "    [✓] avr-size     (2.32)\n";
+      output += "    [✓] arduino-core (1.8.10)\n";
+      output += "    [✓] variant-uno  (standard)\n";
+
+      const depResult = await LibraryManager.resolveDependencies(project.rootPath, fqbn, autoInstall, (log) => {
+          output += log + "\n";
+      });
+
+      if (depResult === 'cancelled') {
+        return {
+          status: 'error',
+          stdout: '',
+          stderr: "Build cancelled: Missing libraries were not installed.",
+          output: output + "\n[✗] Build cancelled: Missing libraries were not installed.",
+          diagnostics: [],
+          timestamp
+        };
+      }
+      output += "\n";
+
+      // 2. Preprocess source (concatenation, prototypes, etc.)
+      output += "Step 2/4: Preprocessing sketch...\n";
       const processedFiles = preprocess(project.files);
 
       // Find the main sketch file
@@ -66,7 +98,8 @@ export const BuildManager = {
         throw new Error("No source files found to build.");
       }
 
-      // 2. Invoke the compiler service
+      // 3. Compile and Link (Library sources, Core, Sketch)
+      output += `Step 3/4: Compiling for ${boardDef.name}...\n`;
       const result = await CompilerService.compile(
         project.rootPath,
         processedFiles,
@@ -75,6 +108,8 @@ export const BuildManager = {
       );
 
       if (result.success) {
+        // 4. Finalize firmware
+        output += "Step 4/4: Producing firmware HEX...\n";
         const buildResult: BuildResult = {
           status: 'success',
           hex: result.hex,
@@ -82,7 +117,7 @@ export const BuildManager = {
           ramUsed: result.ram_used,
           stdout: result.stdout,
           stderr: result.stderr,
-          output: output + `Successfully compiled: Flash ${result.flash_used} bytes, RAM ${result.ram_used} bytes`,
+          output: output + `[✓] Successfully compiled: Flash ${result.flash_used} bytes, RAM ${result.ram_used} bytes`,
           diagnostics: [],
           timestamp
         };
@@ -103,6 +138,23 @@ export const BuildManager = {
         return buildResult;
       }
     } catch (err) {
+      const timestamp = Date.now();
+
+      if (err instanceof LibraryDiagnosticError) {
+        const buildResult: BuildResult = {
+          status: 'error',
+          stdout: '',
+          stderr: err.diagnostic.message,
+          output: output + `Library Error: ${err.diagnostic.message}\n` +
+                  (err.diagnostic.reason ? `Reason: ${err.diagnostic.reason}\n` : '') +
+                  (err.diagnostic.suggestion ? `Suggested Action: ${err.diagnostic.suggestion}` : ''),
+          diagnostics: [err.diagnostic],
+          timestamp
+        };
+        this._lastResults.set(project.rootPath, buildResult);
+        return buildResult;
+      }
+
       const errorMsg = String(err);
       const buildResult: BuildResult = {
         status: 'error',

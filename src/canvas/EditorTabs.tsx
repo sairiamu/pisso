@@ -19,6 +19,7 @@ interface EditorTabsProps {
   onBuildResult?: (result: BuildResult | null) => void;
   onCompileSuccess?: (hex: string) => void;
   onProjectPathChange?: (path: string) => void;
+  autoInstallDependencies?: boolean;
   boards: BoardInfo[];
   selectedBoardId: string | null;
 }
@@ -37,6 +38,7 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({
   onBuildResult,
   onCompileSuccess,
   onProjectPathChange,
+  autoInstallDependencies = false,
   boards,
   selectedBoardId,
 }) => {
@@ -126,6 +128,7 @@ export const EditorTabs: React.FC<EditorTabsProps> = ({
             <RunButton
               projectPath={projectPath}
               files={files}
+              autoInstallDependencies={autoInstallDependencies}
               onOutput={onOutput}
               onBuildResult={onBuildResult}
               onCompileSuccess={onCompileSuccess}

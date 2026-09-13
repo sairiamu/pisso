@@ -17,7 +17,7 @@ export const IconButton: React.FC<IconButtonProps> = ({
   style,
   ...props
 }) => {
-  const dimension = SIZE_MAP[size] || SIZE_MAP.md;
+  const dimension = (size ? SIZE_MAP[size] : null) || SIZE_MAP.md;
 
   return (
     <Button

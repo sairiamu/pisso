@@ -69,6 +69,7 @@ export function reactFlowToCircuit(nodes: Node[], edges: Edge[]): Circuit {
   }));
 
   return {
+    version: 1,
     components,
     connections,
     nets: [], // Nets are typically derived from connections

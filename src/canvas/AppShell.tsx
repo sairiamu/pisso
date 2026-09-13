@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   LayoutDashboard,
   FolderHeart,
@@ -25,7 +25,7 @@ import { GraphPanel } from "./GraphPanel";
 import { PortSelector } from "./PortSelector";
 import { BoardSelector } from "./BoardSelector";
 import { UploadButton } from "./UploadButton";
-import { BoardInfo } from "../domain/models";
+import { BoardInfo, Diagnostic } from "../domain/models";
 import { ProjectStatus } from "../application/ProjectManager";
 import { getBoardByFqbn } from "../domain/boards";
 
@@ -56,6 +56,7 @@ interface AppShellProps {
   onSelectBoard: (id: string | null) => void;
   setDebugStatus?: (status: string) => void;
   status: ProjectStatus;
+  autoInstallDependencies?: boolean;
 }
 
 /**
@@ -83,6 +84,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   onSelectBoard,
   setDebugStatus,
   status,
+  autoInstallDependencies = false,
 }) => {
   const [bottomPanel, setBottomPanel] = useState<'terminal' | 'graph' | null>(null);
   const [selectedPort, setSelectedPort] = useState<string | null>(null);
@@ -569,6 +571,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                 selectedPort={selectedPort}
                 hasHex={!!lastHex}
                 files={files}
+                autoInstallDependencies={autoInstallDependencies}
                 onCompileSuccess={onCompileSuccess}
                 onOutput={appendBuildOutput}
                 onBuildResult={setLastBuildResult}

@@ -3,8 +3,6 @@ import {
   ReactFlow,
   Background,
   BackgroundVariant,
-  Node,
-  Edge,
   Connection as RFConnection,
   ConnectionMode,
   ReactFlowInstance,
@@ -28,7 +26,7 @@ import { useCircuit } from "../domain/CircuitContext";
 import { PARTS_REGISTRY } from "../parts";
 import { useSimulation } from "../simulator/SimulationContext";
 import { ErrorBoundary } from "../components/ErrorBoundary";
-import { RouteCacheProvider, useRouteCache } from "./RouteCache";
+import { RouteCacheProvider } from "./RouteCache";
 import { WireActionsProvider } from "./WireActions";
 import "../parts"; // Ensure all parts are registered
 
@@ -58,11 +56,8 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
     addComponent,
     removeComponent,
     moveComponent,
-    rotateComponent,
     connectPins,
     disconnectPins,
-    updateComponent,
-    updateConnectionStyle,
     addWaypoint,
     moveWaypoint,
     removeWaypoint,
@@ -162,7 +157,6 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
   const [backgroundStyle, setBackgroundStyle] = useState<'dots' | 'lines' | 'plain'>('dots');
   const { setPinMappings, setSerialConnected } = useSimulation();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const routeCache = useRouteCache();
 
   const wireActions = useMemo(
     () => ({
@@ -491,9 +485,9 @@ const CanvasInternal = forwardRef<CanvasShellHandle, CanvasInternalProps>(({ onB
             selectedPart={selectedPart}
             selectedEdge={selectedEdge ? {
               id: selectedEdge.id,
-              color: selectedEdge.data?.color as string | undefined,
-              thickness: selectedEdge.data?.thickness as number | undefined,
-              tracked: selectedEdge.data?.tracked as boolean | undefined,
+              color: (selectedEdge.data as any)?.color as string | undefined,
+              thickness: (selectedEdge.data as any)?.thickness as number | undefined,
+              tracked: (selectedEdge.data as any)?.tracked as boolean | undefined,
             } : null}
           />
         </div>

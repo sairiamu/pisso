@@ -18,7 +18,6 @@ import { LibrariesView } from "./views/Libraries";
 import { ComponentLab } from "./components/Showcase";
 import { X, AlertTriangle } from "lucide-react";
 import { COLORS } from "./CONSTANTS/colors";
-import { SystemApi } from "./infrastructure/tauri/system-api";
 import { Diagnostic } from "./domain/models";
 
 export interface FileEntry {
@@ -86,6 +85,7 @@ function App() {
     { name: "sketch.ino", content: INITIAL_CODE }
   ]);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
+  const [autoInstallDependencies, setAutoInstallDependencies] = useState(false);
   const { isSimulating, setIsSimulating, appendBuildOutput, setLastBuildResult, lastBuildResult } = useSimulation();
   const { circuit, setCircuit, addComponent, clearCircuit } = useCircuit();
   const [lastHex, setLastHex] = useState<string | null>(null);
@@ -174,6 +174,7 @@ function App() {
       setProjectPath(state.path);
       setFiles(state.files);
       setActiveFileIndex(state.activeFileIndex);
+      setAutoInstallDependencies(state.autoInstallDependencies);
       setCircuit(state.circuit);
       setProjectName(state.name);
 
@@ -210,6 +211,7 @@ function App() {
         files,
         circuit,
         activeFileIndex,
+        autoInstallDependencies,
         status: "saving"
       };
 
@@ -247,6 +249,7 @@ function App() {
         files,
         circuit,
         activeFileIndex,
+        autoInstallDependencies,
         status: "saving"
       };
 
@@ -280,6 +283,7 @@ function App() {
       setProjectPath(state.path);
       setFiles(state.files);
       setActiveFileIndex(state.activeFileIndex);
+      setAutoInstallDependencies(state.autoInstallDependencies);
       setCircuit(state.circuit);
       setProjectName(state.name);
 
@@ -456,6 +460,7 @@ function App() {
       onSelectBoard={setSelectedBoardId}
       setDebugStatus={setDebugStatus}
       status={status}
+      autoInstallDependencies={autoInstallDependencies}
     >
       {isClosingDirty && (
         <div style={{
@@ -661,7 +666,6 @@ function App() {
           onCloseProject={handleCloseProject}
           onSelectView={setView}
           onSelectMode={setMode}
-          projectPath={projectPath}
           status={status}
         />
       )}
@@ -679,7 +683,15 @@ function App() {
       {view === "profile" && <ProfileView />}
 
       {/* Libraries View */}
-      {view === "libraries" && <LibrariesView />}
+      {view === "libraries" && (
+        <LibrariesView
+          projectPath={projectPath}
+          boards={boards}
+          selectedBoardId={selectedBoardId}
+          autoInstallDependencies={autoInstallDependencies}
+          onAutoInstallChange={setAutoInstallDependencies}
+        />
+      )}
 
       {/* Component Lab View */}
       {view === "component-lab" && <ComponentLab />}
@@ -716,6 +728,7 @@ function App() {
           projectPath={projectPath}
           files={files}
           activeFileIndex={activeFileIndex}
+          autoInstallDependencies={autoInstallDependencies}
           onSelectTab={setActiveFileIndex}
           onAddTab={handleAddTab}
           onCloseTab={handleCloseTab}

@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BuildManager, BuildableProject } from './BuildManager';
 import { CompilerApi } from '../infrastructure/tauri/compiler-api';
+import { LibraryManager } from './LibraryManager';
 import { ProjectService } from './project-service';
 import { ProjectFile } from '../domain/models';
 
 // We mock the infrastructure and service layers that touch the disk or Rust backend
 vi.mock('../infrastructure/tauri/compiler-api');
+vi.mock('./LibraryManager');
 vi.mock('./project-service');
 vi.mock('../parts', () => ({
   PARTS_REGISTRY: {
@@ -19,6 +21,7 @@ vi.mock('../parts', () => ({
 describe('Build Integration (Sketch to HEX)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(LibraryManager.resolveDependencies).mockResolvedValue('none');
   });
 
   it('should successfully process a sketch and produce a non-empty HEX', async () => {
@@ -87,6 +90,14 @@ describe('Build Integration (Sketch to HEX)', () => {
     // Check structured data
     expect(result.flashUsed).toBe(444);
     expect(result.ramUsed).toBe(9);
+
+    // Verify LibraryManager was called
+    expect(LibraryManager.resolveDependencies).toHaveBeenCalledWith(
+      project.rootPath,
+      'arduino:avr:uno',
+      false,
+      expect.any(Function)
+    );
   });
 
   it('should handle multi-file Arduino projects through the full pipeline', async () => {
@@ -138,5 +149,76 @@ describe('Build Integration (Sketch to HEX)', () => {
     const headerFile = processedFiles.find(f => f.name === 'utils.h');
     expect(headerFile).toBeDefined();
     expect(headerFile?.content).toContain('#define VERSION 1');
+  });
+
+  it('should integrate LibraryManager to resolve dependencies like Servo', async () => {
+    const files: ProjectFile[] = [
+      {
+        name: 'sketch.ino',
+        content: `
+          #include <Servo.h>
+          Servo myservo;
+          void setup() { myservo.attach(9); }
+          void loop() {}
+        `
+      }
+    ];
+
+    const project: BuildableProject = {
+      rootPath: '/test/servo-project',
+      files: files,
+      circuit: {
+        version: 1,
+        components: [{ id: 'b1', definitionId: 'wokwi-arduino-uno', x: 0, y: 0, rotation: 0, attributes: {} }],
+        connections: [],
+        nets: []
+      }
+    };
+
+    // Mock LibraryManager to simulate finding and installing Servo
+    vi.mocked(LibraryManager.resolveDependencies).mockResolvedValue('ok');
+
+    vi.mocked(CompilerApi.compileSketch).mockResolvedValue({
+      success: true,
+      hex: ':020000040000FA',
+      flash_used: 1200,
+      ram_used: 50,
+      stdout: 'Compiling with Servo...',
+      stderr: ''
+    });
+
+    const result = await BuildManager.build(project, 'arduino:avr:uno', true);
+
+    expect(LibraryManager.resolveDependencies).toHaveBeenCalledWith(
+      project.rootPath,
+      'arduino:avr:uno',
+      true,
+      expect.any(Function)
+    );
+    expect(result.status).toBe('success');
+    expect(result.flashUsed).toBe(1200);
+    expect(CompilerApi.compileSketch).toHaveBeenCalled();
+  });
+
+  it('should abort build if library resolution is cancelled', async () => {
+    const project: BuildableProject = {
+      rootPath: '/test/cancelled-project',
+      files: [{ name: 'sketch.ino', content: '#include <Unknown.h>\nvoid setup(){}\nvoid loop(){}' }],
+      circuit: {
+        version: 1,
+        components: [{ id: 'b1', definitionId: 'wokwi-arduino-uno', x: 0, y: 0, rotation: 0, attributes: {} }],
+        connections: [],
+        nets: []
+      }
+    };
+
+    // Mock LibraryManager to simulate user cancelling installation
+    vi.mocked(LibraryManager.resolveDependencies).mockResolvedValue('cancelled');
+
+    const result = await BuildManager.build(project);
+
+    expect(result.status).toBe('error');
+    expect(result.stderr).toContain('Build cancelled');
+    expect(CompilerApi.compileSketch).not.toHaveBeenCalled();
   });
 });

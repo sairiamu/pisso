@@ -3,18 +3,19 @@ import { Upload } from "lucide-react";
 import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
 import { FileEntry } from "../App";
-import { BoardInfo } from "../domain/models";
+import { BoardInfo, ProjectFile, BuildResult } from "../domain/models";
 import { ProjectManager } from "../application/ProjectManager";
 import { CompilerService } from "../application/compiler-service";
 import { BuildManager } from "../application/BuildManager";
+import { LibraryManager } from "../application/LibraryManager";
 import { getBoardByFqbn } from "../domain/boards";
-import { Project, ProjectFile } from "../domain/models";
 
 interface UploadButtonProps {
   projectPath: string | null;
   selectedPort: string | null;
   hasHex: boolean;
   files: FileEntry[];
+  autoInstallDependencies?: boolean;
   onCompileSuccess?: (hex: string) => void;
   onOutput?: (output: string | null) => void;
   onBuildResult?: (result: BuildResult | null) => void;
@@ -29,6 +30,7 @@ export const UploadButton: React.FC<UploadButtonProps> = ({
   selectedPort,
   hasHex,
   files,
+  autoInstallDependencies = false,
   onCompileSuccess,
   onOutput,
   onBuildResult,
@@ -98,7 +100,7 @@ export const UploadButton: React.FC<UploadButtonProps> = ({
           circuit: { components: [], connections: [], nets: [], version: 1 }
         };
 
-        const buildResult = await BuildManager.build(buildProject, board.fqbn);
+        const buildResult = await BuildManager.build(buildProject, board.fqbn, autoInstallDependencies);
         onBuildResult?.(buildResult);
 
         if (buildResult.status !== 'success') {

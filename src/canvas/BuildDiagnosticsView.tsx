@@ -1,5 +1,5 @@
 import React from "react";
-import { AlertCircle, AlertTriangle, Info, ExternalLink } from "lucide-react";
+import { AlertCircle, AlertTriangle, ExternalLink } from "lucide-react";
 import { BuildResult, Diagnostic } from "../domain/models";
 import { COLORS } from "../CONSTANTS/colors";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";

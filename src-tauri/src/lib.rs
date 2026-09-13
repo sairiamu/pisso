@@ -1,16 +1,26 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Write, Read};
 use tauri::{Manager, Emitter, path::BaseDirectory};
 use std::sync::Mutex;
 use serialport::SerialPort;
 use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
 use serde_json;
+use sha2::{Sha256, Digest};
+use futures_util::StreamExt;
 
 pub struct AppState {
     pub serial_port: Mutex<Option<Box<dyn SerialPort>>>,
+}
+
+#[derive(serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct DownloadProgress {
+    status: String,
+    progress: f64,
+    message: String,
 }
 
 const SCHEMA_VERSION: u32 = 1;
@@ -29,6 +39,8 @@ struct PissoProjectMetadata {
     schema_version: u32,
     name: String,
     active_file_index: u32,
+    #[serde(default)]
+    auto_install_dependencies: bool,
 }
 
 /// GNU tools on Windows often choke on the Verbatim prefix (\\?\)
@@ -84,6 +96,57 @@ fn find_included_headers(source: &str) -> Vec<String> {
     re.captures_iter(source)
         .map(|c| c[1].to_string())
         .collect()
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+struct LibraryProperties {
+    name: String,
+    version: String,
+    author: String,
+    maintainer: String,
+    sentence: String,
+    paragraph: Option<String>,
+    category: String,
+    url: String,
+    architectures: Option<String>,
+    depends: Option<String>,
+}
+
+fn parse_library_properties(path: &Path) -> Result<LibraryProperties, String> {
+    let content = fs::read_to_string(path).map_err(|e| {
+        diagnostic_error("LIBRARY_METADATA_ERROR", path.to_string_lossy().as_ref(), &format!("Failed to read library.properties: {}", e))
+    })?;
+
+    let mut map = std::collections::HashMap::new();
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some((key, value)) = line.split_once('=') {
+            map.insert(key.trim().to_string(), value.trim().to_string());
+        }
+    }
+
+    let get_required = |key: &str| -> Result<String, String> {
+        map.get(key).cloned().ok_or_else(|| {
+            diagnostic_error("LIBRARY_METADATA_MISSING", path.to_string_lossy().as_ref(), &format!("Missing required field: {}", key))
+        })
+    };
+
+    Ok(LibraryProperties {
+        name: get_required("name")?,
+        version: get_required("version")?,
+        author: get_required("author")?,
+        maintainer: get_required("maintainer")?,
+        sentence: get_required("sentence")?,
+        paragraph: map.get("paragraph").cloned(),
+        category: get_required("category")?,
+        url: get_required("url")?,
+        architectures: map.get("architectures").cloned(),
+        depends: map.get("depends").cloned(),
+    })
 }
 
 struct ResolvedLibrary {
@@ -460,6 +523,7 @@ fn migrate_project(project_path: &Path) -> Result<(), String> {
         schema_version: SCHEMA_VERSION,
         name,
         active_file_index,
+        auto_install_dependencies: false,
     };
     let meta_json = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
     fs::write(new_meta_path, meta_json).map_err(|e| {
@@ -500,6 +564,7 @@ fn create_new_project(app_handle: tauri::AppHandle, name: String) -> Result<Stri
         schema_version: SCHEMA_VERSION,
         name: safe_name,
         active_file_index: 0,
+        auto_install_dependencies: false,
     };
     let meta_json = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
     fs::write(candidate.join(PROJECT_METADATA_FILE), meta_json).map_err(|e| e.to_string())?;
@@ -1287,7 +1352,7 @@ fn get_library_catalog(app_handle: tauri::AppHandle) -> Result<Vec<LibraryCatalo
 }
 
 #[tauri::command]
-fn install_bundled_library(app_handle: tauri::AppHandle, name: String) -> Result<(), String> {
+fn install_bundled_library(app_handle: tauri::AppHandle, name: String, project_path: Option<String>) -> Result<(), String> {
     let bundled_dir = clean_path(
         app_handle.path().resolve("resources/arduino-libraries", BaseDirectory::Resource)
             .map_err(|e| e.to_string())?
@@ -1295,68 +1360,210 @@ fn install_bundled_library(app_handle: tauri::AppHandle, name: String) -> Result
     if !bundled_dir.exists() {
         return Err(format!("'{}' is not a bundled library", name));
     }
-    let dest = app_handle.path().app_data_dir().map_err(|e| e.to_string())?.join("libraries").join(&name);
-    copy_dir_recursive(&bundled_dir, &dest).map_err(|e| e.to_string())
+
+    let libraries_dir = if let Some(path) = project_path {
+        clean_path(path).join(LIBRARIES_DIR)
+    } else {
+        app_handle.path().app_data_dir().map_err(|e| e.to_string())?.join("libraries")
+    };
+    fs::create_dir_all(&libraries_dir).map_err(|e| e.to_string())?;
+
+    // 1. Install into a temporary directory
+    let temp_dest = libraries_dir.join(format!(".{}.tmp", name));
+    if temp_dest.exists() {
+        fs::remove_dir_all(&temp_dest).ok();
+    }
+
+    let result = (|| -> Result<(), String> {
+        copy_dir_recursive(&bundled_dir, &temp_dest).map_err(|e| e.to_string())?;
+
+        // 2. Validate the library
+        let prop_path = temp_dest.join("library.properties");
+        if prop_path.exists() {
+            parse_library_properties(&prop_path)?;
+        }
+
+        // 3. Only then move it into the project library directory
+        let dest = libraries_dir.join(&name);
+        if dest.exists() {
+            fs::remove_dir_all(&dest).map_err(|e| e.to_string())?;
+        }
+        fs::rename(&temp_dest, &dest).map_err(|e| e.to_string())?;
+        Ok(())
+    })();
+
+    // 4. If installation fails, clean the temporary directory
+    if result.is_err() && temp_dest.exists() {
+        let _ = fs::remove_dir_all(&temp_dest);
+    }
+
+    result
 }
 
 #[tauri::command]
-fn remove_library(app_handle: tauri::AppHandle, name: String) -> Result<(), String> {
-    let dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?.join("libraries").join(&name);
+fn remove_library(app_handle: tauri::AppHandle, name: String, project_path: Option<String>) -> Result<(), String> {
+    let libraries_dir = if let Some(path) = project_path {
+        clean_path(path).join(LIBRARIES_DIR)
+    } else {
+        app_handle.path().app_data_dir().map_err(|e| e.to_string())?.join("libraries")
+    };
+    let dir = libraries_dir.join(&name);
     if dir.exists() {
         fs::remove_dir_all(dir).map_err(|e| e.to_string())?;
     }
     Ok(())
 }
 
-fn extract_library_zip(app_handle: &tauri::AppHandle, zip_path: &Path) -> Result<String, String> {
+fn extract_library_zip(app_handle: &tauri::AppHandle, zip_path: &Path, project_path: Option<String>) -> Result<String, String> {
     let file = fs::File::open(zip_path).map_err(|e| e.to_string())?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
 
-    let libraries_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?.join("libraries");
+    let libraries_dir = if let Some(path) = project_path {
+        clean_path(path).join(LIBRARIES_DIR)
+    } else {
+        app_handle.path().app_data_dir().map_err(|e| e.to_string())?.join("libraries")
+    };
     fs::create_dir_all(&libraries_dir).map_err(|e| e.to_string())?;
 
-    // Extract to a temp staging dir first
-    let staging = std::env::temp_dir().join(format!("pisso-lib-import-{}", std::process::id()));
+    // 1. Install into a temporary directory (staging)
+    let staging = libraries_dir.join(format!(".staging-{}", std::process::id()));
     if staging.exists() {
-        fs::remove_dir_all(&staging).map_err(|e| e.to_string())?;
+        fs::remove_dir_all(&staging).ok();
     }
     fs::create_dir_all(&staging).map_err(|e| e.to_string())?;
 
-    for i in 0..archive.len() {
-        let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
-        let outpath = staging.join(entry.name());
-        if entry.name().ends_with('/') {
-            fs::create_dir_all(&outpath).map_err(|e| e.to_string())?;
-        } else {
-            if let Some(parent) = outpath.parent() {
-                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    let result = (|| -> Result<String, String> {
+        for i in 0..archive.len() {
+            let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
+            let outpath = staging.join(entry.name());
+            if entry.name().ends_with('/') {
+                fs::create_dir_all(&outpath).map_err(|e| e.to_string())?;
+            } else {
+                if let Some(parent) = outpath.parent() {
+                    fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                }
+                let mut outfile = fs::File::create(&outpath).map_err(|e| e.to_string())?;
+                std::io::copy(&mut entry, &mut outfile).map_err(|e| e.to_string())?;
             }
-            let mut outfile = fs::File::create(&outpath).map_err(|e| e.to_string())?;
-            std::io::copy(&mut entry, &mut outfile).map_err(|e| e.to_string())?;
         }
+
+        let entries: Vec<_> = fs::read_dir(&staging).map_err(|e| e.to_string())?.flatten().collect();
+        let source_root = if entries.len() == 1 && entries[0].path().is_dir() {
+            entries[0].path()
+        } else {
+            staging.clone()
+        };
+
+        // 2. Validate the library
+        let prop_path = source_root.join("library.properties");
+        if !prop_path.exists() {
+            return Err(diagnostic_error("LIBRARY_METADATA_MISSING", "library.properties", "Library is missing library.properties file"));
+        }
+
+        parse_library_properties(&prop_path)?;
+
+        let lib_name = source_root.file_name().ok_or("Could not determine library name")?.to_string_lossy().to_string();
+        let dest = libraries_dir.join(&lib_name);
+
+        // 3. Only then move it into the project library directory
+        if dest.exists() {
+            fs::remove_dir_all(&dest).map_err(|e| e.to_string())?;
+        }
+
+        fs::rename(&source_root, &dest).map_err(|e| {
+            format!("Failed to move library to final destination: {}", e)
+        })?;
+
+        Ok(lib_name)
+    })();
+
+    // 4. If installation fails, clean the temporary directory (always clean staging)
+    if staging.exists() {
+        let _ = fs::remove_dir_all(&staging);
     }
 
-    let entries: Vec<_> = fs::read_dir(&staging).map_err(|e| e.to_string())?.flatten().collect();
-    let source_root = if entries.len() == 1 && entries[0].path().is_dir() {
-        entries[0].path()
-    } else {
-        staging.clone()
-    };
-
-    let lib_name = source_root.file_name().ok_or("Could not determine library name")?.to_string_lossy().to_string();
-    let dest = libraries_dir.join(&lib_name);
-    if dest.exists() {
-        fs::remove_dir_all(&dest).map_err(|e| e.to_string())?;
-    }
-    copy_dir_recursive(&source_root, &dest).map_err(|e| e.to_string())?;
-    let _ = fs::remove_dir_all(&staging);
-
-    Ok(lib_name)
+    result
 }
 
 #[tauri::command]
-fn install_library_from_zip(app_handle: tauri::AppHandle, zip_path: String) -> Result<String, String> {
-    extract_library_zip(&app_handle, Path::new(&zip_path))
+fn install_library_from_zip(app_handle: tauri::AppHandle, zip_path: String, project_path: Option<String>) -> Result<String, String> {
+    extract_library_zip(&app_handle, Path::new(&zip_path), project_path)
+}
+
+#[tauri::command]
+async fn download_and_install_library(
+    app_handle: tauri::AppHandle,
+    url: String,
+    name: String,
+    checksum: Option<String>,
+    project_path: Option<String>,
+) -> Result<String, String> {
+    let emit = |status: &str, progress: f64, message: &str| {
+        let _ = app_handle.emit("library-download-progress", DownloadProgress {
+            status: status.to_string(),
+            progress,
+            message: message.to_string(),
+        });
+    };
+
+    emit("downloading", 0.0, &format!("Starting download of {}", name));
+
+    // 1. Download to temporary file
+    let client = reqwest::Client::new();
+    let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
+
+    if !response.status().is_success() {
+        return Err(format!("Download failed with status: {}", response.status()));
+    }
+
+    let total_size = response.content_length().unwrap_or(0);
+    let mut downloaded: u64 = 0;
+    let mut stream = response.bytes_stream();
+
+    let temp_file = tempfile::NamedTempFile::new().map_err(|e| e.to_string())?;
+    let mut file = temp_file.reopen().map_err(|e| e.to_string())?;
+
+    let mut hasher = Sha256::new();
+
+    while let Some(item) = stream.next().await {
+        let chunk = item.map_err(|e| e.to_string())?;
+        file.write_all(&chunk).map_err(|e| e.to_string())?;
+
+        if checksum.is_some() {
+            hasher.update(&chunk);
+        }
+
+        downloaded += chunk.len() as u64;
+        if total_size > 0 {
+            let progress = downloaded as f64 / total_size as f64;
+            emit("downloading", progress, &format!("Downloaded {} of {} bytes", downloaded, total_size));
+        }
+    }
+
+    // 2. Validate Checksum
+    if let Some(expected_checksum) = checksum {
+        emit("validating", 0.9, "Validating checksum...");
+        let actual_checksum = format!("{:x}", hasher.finalize());
+
+        // Arduino library index often prefixes checksums with the algorithm (e.g., "SHA-256:")
+        let clean_expected = if expected_checksum.to_uppercase().starts_with("SHA-256:") {
+            &expected_checksum[8..]
+        } else {
+            &expected_checksum
+        };
+
+        if actual_checksum.to_lowercase() != clean_expected.to_lowercase() {
+            return Err(format!("Checksum mismatch. Expected: {}, Actual: {}", expected_checksum, actual_checksum));
+        }
+    }
+
+    // 3. Extraction and Validation
+    emit("extracting", 0.95, "Extracting library...");
+    let lib_name = extract_library_zip(&app_handle, temp_file.path(), project_path)?;
+
+    emit("completed", 1.0, &format!("Library {} installed successfully", lib_name));
+
+    Ok(lib_name)
 }
 
 fn copy_dir_recursive(src: &Path, dest: &Path) -> std::io::Result<()> {
@@ -1373,20 +1580,122 @@ fn copy_dir_recursive(src: &Path, dest: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+#[derive(serde::Serialize)]
+struct InstalledLib {
+    name: String,
+    source: String,
+    properties: Option<LibraryProperties>,
+}
+
 #[tauri::command]
-fn list_installed_libraries(app_handle: tauri::AppHandle) -> Result<Vec<String>, String> {
-    let user_libraries_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?.join("libraries");
-    if !user_libraries_dir.exists() {
-        return Ok(Vec::new());
+fn list_installed_libraries(app_handle: tauri::AppHandle, project_path: Option<String>) -> Result<Vec<InstalledLib>, String> {
+    let mut libs = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    let mut collect_from_dir = |dir: &Path, source: &str| -> Result<(), String> {
+        if dir.exists() {
+            if let Ok(entries) = fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    if entry.path().is_dir() {
+                        let name = entry.file_name().to_string_lossy().to_string();
+                        if !seen.contains(&name) {
+                            let prop_path = entry.path().join("library.properties");
+                            let properties = if prop_path.exists() {
+                                parse_library_properties(&prop_path).ok()
+                            } else {
+                                None
+                            };
+
+                            libs.push(InstalledLib {
+                                name: name.clone(),
+                                source: source.to_string(),
+                                properties,
+                            });
+                            seen.insert(name);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    };
+
+    // Project Libraries take precedence
+    if let Some(path) = project_path {
+        collect_from_dir(&clean_path(path).join(LIBRARIES_DIR), "project")?;
     }
-    let mut names = Vec::new();
-    for entry in fs::read_dir(&user_libraries_dir).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        if entry.path().is_dir() {
-            names.push(entry.file_name().to_string_lossy().to_string());
+
+    // Global Libraries
+    let user_libraries_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?.join("libraries");
+    collect_from_dir(&user_libraries_dir, "local")?;
+
+    libs.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(libs)
+}
+
+#[tauri::command]
+async fn scan_missing_headers(
+    app_handle: tauri::AppHandle,
+    project_path: String,
+    board_fqbn: String,
+) -> Result<Vec<String>, String> {
+    let project_root = clean_path(project_path);
+    let _config = get_board_config(&board_fqbn)?;
+
+    // Core and bundled library paths
+    let arduino_core = app_handle.path().resolve("resources/arduino-core", BaseDirectory::Resource)
+        .map_err(|e| format!("Failed to resolve arduino-core: {}", e))?;
+    let bundled_libraries_dir = app_handle.path().resolve("resources/arduino-libraries", BaseDirectory::Resource)
+        .map_err(|e| format!("Failed to resolve arduino-libraries: {}", e))?;
+    let user_libraries_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?.join("libraries");
+
+    let mut search_roots = vec![bundled_libraries_dir, user_libraries_dir];
+    let project_libraries = project_root.join(LIBRARIES_DIR);
+    if project_libraries.exists() {
+        search_roots.insert(0, project_libraries);
+    }
+
+    // 1. Scan all files in project/src
+    let src_dir = project_root.join(SRC_DIR);
+    let mut all_headers = std::collections::HashSet::new();
+
+    if let Ok(entries) = fs::read_dir(&src_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+                    if ext == "ino" || ext == "cpp" || ext == "c" || ext == "h" {
+                        if let Ok(content) = fs::read_to_string(&path) {
+                            for h in find_included_headers(&content) {
+                                all_headers.insert(h);
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
-    Ok(names)
+
+    // 2. Check if headers are resolved
+    let mut missing = Vec::new();
+    for header in all_headers {
+        // Core?
+        if arduino_core.join(&header).exists() {
+            continue;
+        }
+
+        // Local in src?
+        if src_dir.join(&header).exists() {
+            continue;
+        }
+
+        // Libraries?
+        if resolve_library(&header, &search_roots).is_none() {
+            missing.push(header);
+        }
+    }
+
+    Ok(missing)
 }
 
 #[tauri::command]
@@ -1522,6 +1831,8 @@ pub fn run() {
             install_bundled_library,
             remove_library,
             install_library_from_zip,
+            download_and_install_library,
+            scan_missing_headers,
             rename_project,
             delete_project
         ])

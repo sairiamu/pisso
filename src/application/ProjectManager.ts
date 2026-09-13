@@ -10,6 +10,7 @@ export interface ProjectState {
   files: ProjectFile[];
   circuit: Circuit;
   activeFileIndex: number;
+  autoInstallDependencies: boolean;
   status: ProjectStatus;
   error?: string;
 }
@@ -33,7 +34,9 @@ export const ProjectManager = {
       name: metadata?.name || name,
       files,
       circuit,
-      activeFileIndex: metadata?.activeFileIndex ?? 0
+      activeFileIndex: metadata?.activeFileIndex ?? 0,
+      autoInstallDependencies: metadata?.autoInstallDependencies ?? false,
+      status: "ready"
     };
   },
 
@@ -68,7 +71,9 @@ export const ProjectManager = {
       name: metadata?.name || selected.split(/[\\/]/).pop() || "Untitled",
       files,
       circuit,
-      activeFileIndex: metadata?.activeFileIndex ?? 0
+      activeFileIndex: metadata?.activeFileIndex ?? 0,
+      autoInstallDependencies: metadata?.autoInstallDependencies ?? false,
+      status: "ready"
     };
   },
 
@@ -85,7 +90,8 @@ export const ProjectManager = {
     const metadata = {
       schemaVersion: 1,
       name: state.name,
-      activeFileIndex: state.activeFileIndex
+      activeFileIndex: state.activeFileIndex,
+      autoInstallDependencies: state.autoInstallDependencies
     };
     await ProjectService.saveProjectMetadata(currentPath, metadata);
 

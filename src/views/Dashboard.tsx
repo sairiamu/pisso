@@ -12,7 +12,6 @@ interface DashboardProps {
   onCloseProject?: () => void;
   onSelectView?: (view: any) => void;
   onSelectMode?: (mode: any) => void;
-  projectPath: string | null;
   status: ProjectStatus;
 }
 
@@ -24,7 +23,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onCloseProject,
   onSelectView,
   onSelectMode,
-  projectPath,
   status
 }) => {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);

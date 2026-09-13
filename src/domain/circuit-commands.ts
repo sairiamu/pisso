@@ -146,8 +146,8 @@ export function createInverse(state: Circuit, command: CircuitCommand): CircuitC
       return {
         type: 'BATCH',
         commands: [
-          { type: 'ADD_COMPONENT', ...comp },
-          ...connections.map((c) => ({ type: 'ADD_CONNECTION', connection: c })),
+          { type: 'ADD_COMPONENT', ...comp } as CircuitCommand,
+          ...connections.map((c) => ({ type: 'ADD_CONNECTION', connection: c } as CircuitCommand)),
         ],
       };
     }
