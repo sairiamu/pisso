@@ -461,6 +461,7 @@ function App() {
       setDebugStatus={setDebugStatus}
       status={status}
       autoInstallDependencies={autoInstallDependencies}
+      circuit={circuit}
     >
       {isClosingDirty && (
         <div style={{

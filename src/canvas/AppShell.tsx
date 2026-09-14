@@ -18,14 +18,14 @@ import { COLORS } from "../CONSTANTS/colors";
 import { PANEL } from "../CONSTANTS/panel";
 import { ModeSwitcher, AppMode } from "./ModeSwitcher";
 import { TYPOGRAPHY } from "../CONSTANTS/typography";
-import { SimulationService } from "../application/simulation-service";
+import { simulationManager } from "../application/simulation-service";
 import { useSimulation } from "../simulator/SimulationContext";
 import { TerminalPanel } from "./TerminalPanel";
 import { GraphPanel } from "./GraphPanel";
 import { PortSelector } from "./PortSelector";
 import { BoardSelector } from "./BoardSelector";
 import { UploadButton } from "./UploadButton";
-import { BoardInfo, Diagnostic } from "../domain/models";
+import { BoardInfo, Diagnostic, Circuit } from "../domain/models";
 import { ProjectStatus } from "../application/ProjectManager";
 import { getBoardByFqbn } from "../domain/boards";
 
@@ -57,6 +57,7 @@ interface AppShellProps {
   setDebugStatus?: (status: string) => void;
   status: ProjectStatus;
   autoInstallDependencies?: boolean;
+  circuit?: Circuit;
 }
 
 /**
@@ -85,6 +86,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   setDebugStatus,
   status,
   autoInstallDependencies = false,
+  circuit,
 }) => {
   const [bottomPanel, setBottomPanel] = useState<'terminal' | 'graph' | null>(null);
   const [selectedPort, setSelectedPort] = useState<string | null>(null);
@@ -150,7 +152,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   useEffect(() => {
     setWriteSerialHandler((data: string) => {
       if (serialSource === 'simulation') {
-        SimulationService.writeSerial(data);
+        simulationManager.writeSerial(data);
       } else {
         SerialService.write(data).catch(err => {
           console.error("Failed to write to hardware serial:", err);
@@ -185,13 +187,13 @@ export const AppShell: React.FC<AppShellProps> = ({
 
   useEffect(() => {
     if (!isSimulating) {
-      SimulationService.stop();
+      simulationManager.stop();
       resetPinStates();
       setSerialConnected(false);
     }
 
     return () => {
-      SimulationService.stop();
+      simulationManager.stop();
       resetPinStates();
       setSerialConnected(false);
     };
@@ -227,12 +229,29 @@ export const AppShell: React.FC<AppShellProps> = ({
     }
 
     try {
-      SimulationService.start(
+      const diagnostics = simulationManager.loadFirmware(
         lastHex,
         boardDef!, // Passing boardDef (will use default if undefined in start)
+        circuit!,
         (pin, state) => setPinState(pin, state),
         (byte) => appendSerialOutput(String.fromCharCode(byte))
       );
+
+      const hasErrors = diagnostics.some(d => d.severity === 'error');
+      if (hasErrors) {
+        diagnostics.forEach(d => {
+          appendBuildOutput(`[SIM ERROR] ${d.message}${d.line ? ' at line ' + d.line : ''}`);
+        });
+        alert("Failed to load simulation firmware. Check terminal for details.");
+        return;
+      }
+
+      // Log warnings to terminal
+      diagnostics.filter(d => d.severity === 'warning').forEach(d => {
+        appendBuildOutput(`[SIM WARNING] ${d.message}${d.line ? ' at line ' + d.line : ''}`);
+      });
+
+      simulationManager.start();
       setSerialConnected(true);
       onSimulateToggle?.(true);
     } catch (err) {

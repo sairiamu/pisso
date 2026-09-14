@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
-import { PinState } from './engine';
-import { BuildResult } from '../domain/models';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { PinState, BuildResult } from '../domain/models';
+import { simulationStore, ObservableSimulationState } from './SimulationStore';
 
 interface SimulationContextType {
   isSimulating: boolean;
@@ -11,6 +11,7 @@ interface SimulationContextType {
   lastBuildResult: BuildResult | null;
   serialConnected: boolean;
   serialSource: 'simulation' | 'hardware';
+  storeState: ObservableSimulationState;
   setPinState: (pin: string | number, state: PinState) => void;
   appendSerialOutput: (text: string) => void;
   clearSerialOutput: () => void;
@@ -29,7 +30,7 @@ interface SimulationContextType {
 const SimulationContext = createContext<SimulationContextType | undefined>(undefined);
 
 export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isSimulating, setIsSimulating] = useState(false);
+  const [isSimulating, setIsSimulatingState] = useState(false);
   const [pinStates, setPinStates] = useState<Record<string | number, PinState>>({});
   const [pinMappings, setPinMappings] = useState<Record<string, (string | number)[]>>({});
   const [serialOutput, setSerialOutput] = useState('');
@@ -38,20 +39,32 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [serialConnected, setSerialConnected] = useState(false);
   const [serialSource, setSerialSource] = useState<'simulation' | 'hardware'>('simulation');
   const [writeSerialHandler, setWriteSerialHandler] = useState<(data: string) => void>(() => () => {});
+  const [storeState, setStoreState] = useState<ObservableSimulationState>(() => simulationStore.getState());
 
-  const setPinState = useCallback((pin: string | number, state: PinState) => {
-    setPinStates((prev) => {
-      if (prev[pin] === state) return prev;
-      return { ...prev, [pin]: state };
+  // Sync with external simulationStore
+  useEffect(() => {
+    return simulationStore.subscribe((nextState) => {
+      setStoreState(nextState);
+      setIsSimulatingState(nextState.isSimulating);
+      setPinStates(nextState.digitalPins);
+      setSerialOutput(nextState.serialOutput);
     });
   }, []);
 
+  const setIsSimulating = useCallback((simulating: boolean) => {
+    simulationStore.setIsSimulating(simulating);
+  }, []);
+
+  const setPinState = useCallback((pin: string | number, state: PinState) => {
+    simulationStore.setDigitalPin(pin, state);
+  }, []);
+
   const appendSerialOutput = useCallback((text: string) => {
-    setSerialOutput((prev) => prev + text);
+    simulationStore.appendSerialOutput(text);
   }, []);
 
   const clearSerialOutput = useCallback(() => {
-    setSerialOutput('');
+    simulationStore.clearSerialOutput();
   }, []);
 
   const appendBuildOutput = useCallback((text: string | null) => {
@@ -67,8 +80,8 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [writeSerialHandler]);
 
   const resetPinStates = useCallback(() => {
-    setPinStates({});
-    setSerialOutput('');
+    simulationStore.reset();
+    setBuildOutput(null);
   }, []);
 
   return (

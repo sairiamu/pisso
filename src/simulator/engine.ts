@@ -12,12 +12,19 @@ import {
   timer1Config,
   timer2Config,
 } from 'avr8js';
-import { parse } from 'intel-hex';
 import { UNO_PIN_MAP } from './pinMap';
-import { BoardDefinition } from '../domain/models';
+import { BoardDefinition, Diagnostic, PinState } from '../domain/models';
 import { ARDUINO_UNO } from '../domain/boards';
+import { validateHex } from './hex-validator';
 
-export type PinState = 'HIGH' | 'LOW';
+function getFlashSize(mcu: string): number {
+  switch (mcu.toLowerCase()) {
+    case 'atmega328p': return 32768;
+    case 'atmega2560': return 262144;
+    case 'attiny85': return 8192;
+    default: return 32768;
+  }
+}
 
 /**
  * SimulationEngine wrap avr8js to provide a cycle-accurate AVR simulation.
@@ -35,9 +42,14 @@ export class SimulationEngine {
   private running = false;
   private lastTime = 0;
   private board: BoardDefinition;
+  private animationFrameId: number | null = null;
+  private simTimeoutId: any = null;
+  private dirtyPins = new Set<string | number>();
+  private uartBuffer: number[] = [];
 
   public onPinChange?: (pin: string | number, state: PinState) => void;
   public onUartByte?: (byte: number) => void;
+  public onStateUpdate?: (state: { pc: number; cycles: number }) => void;
 
   constructor(flash: Uint16Array, board: BoardDefinition = ARDUINO_UNO) {
     this.board = board;
@@ -58,34 +70,46 @@ export class SimulationEngine {
   /**
    * Factory method to create an engine from an Intel Hex string.
    */
-  public static fromHex(hex: string, board: BoardDefinition = ARDUINO_UNO): SimulationEngine {
-    const buffer = parse(hex).data;
-    // TODO: Use board.mcu or some other metadata to determine flash size
-    const flashSize = board.id === 'arduino-uno' ? 32768 : 32768;
-    const flash = new Uint16Array(flashSize);
-    for (let i = 0; i < buffer.length; i += 2) {
-      flash[i / 2] = buffer[i] | (buffer[i + 1] << 8);
+  public static fromHex(
+    hex: string,
+    board: BoardDefinition = ARDUINO_UNO
+  ): { engine: SimulationEngine | null; diagnostics: Diagnostic[] } {
+    const flashSize = getFlashSize(board.mcu);
+
+    const { isValid, data, diagnostics } = validateHex(hex, flashSize);
+
+    if (!isValid) {
+      return { engine: null, diagnostics };
     }
-    return new SimulationEngine(flash, board);
-  }
 
-  private setupListeners() {
-    this.portB.addListener(() => this.handlePortChange('B', this.portB));
-    this.portC.addListener(() => this.handlePortChange('C', this.portC));
-    this.portD.addListener(() => this.handlePortChange('D', this.portD));
+    // AVR instructions are 16-bit, so flash size in words is bytes / 2
+    const flash = new Uint16Array(flashSize / 2);
+    for (let i = 0; i < data.length; i += 2) {
+      flash[i / 2] = data[i] | (data[i + 1] << 8);
+    }
 
-    this.usart.onByteTransmit = (byte) => {
-      this.onUartByte?.(byte);
+    return {
+      engine: new SimulationEngine(flash, board),
+      diagnostics,
     };
   }
 
-  private handlePortChange(portName: 'B' | 'C' | 'D', port: AVRIOPort) {
+  private setupListeners() {
+    this.portB.addListener(() => this.markPortDirty('B'));
+    this.portC.addListener(() => this.markPortDirty('C'));
+    this.portD.addListener(() => this.markPortDirty('D'));
+
+    this.usart.onByteTransmit = (byte) => {
+      this.uartBuffer.push(byte);
+    };
+  }
+
+  private markPortDirty(portName: 'B' | 'C' | 'D') {
     const pinMap = this.board.simulation.pinMap || UNO_PIN_MAP;
     Object.keys(pinMap).forEach((pin) => {
       const mapping = pinMap[pin];
       if (mapping.port === portName) {
-        const state = port.pinState(mapping.bit) ? 'HIGH' : 'LOW';
-        this.onPinChange?.(pin, state);
+        this.dirtyPins.add(pin);
       }
     });
   }
@@ -97,7 +121,8 @@ export class SimulationEngine {
     if (this.running) return;
     this.running = true;
     this.lastTime = performance.now();
-    this.loop();
+    this.runSimulation();
+    this.scheduleUiUpdate();
   }
 
   /**
@@ -105,6 +130,23 @@ export class SimulationEngine {
    */
   public pause() {
     this.running = false;
+    if (this.animationFrameId !== null) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+    if (this.simTimeoutId !== null) {
+      clearTimeout(this.simTimeoutId);
+      this.simTimeoutId = null;
+    }
+  }
+
+  /**
+   * Executes a single instruction.
+   */
+  public step() {
+    this.pause();
+    avrInstruction(this.cpu);
+    this.cpu.tick();
   }
 
   /**
@@ -115,24 +157,71 @@ export class SimulationEngine {
     // Note: AVRTimer and AVRIOPort state are mostly tied to CPU registers
   }
 
-  private loop = () => {
+  /**
+   * Returns the current simulation state.
+   */
+  public readState() {
+    return {
+      running: this.running,
+      pc: this.cpu.pc,
+      cycles: this.cpu.cycles,
+    };
+  }
+
+  private runSimulation = () => {
     if (!this.running) return;
 
     const now = performance.now();
     let deltaMs = now - this.lastTime;
-    if (deltaMs > 100) deltaMs = 100; // Cap to avoid huge catch-up jumps
-    this.lastTime = now;
 
-    // clock speed cycles per millisecond
+    // Cap catch-up to 20ms to allow frequent yielding for UI responsiveness
+    if (deltaMs > 20) deltaMs = 20;
+
     const cyclesToRun = Math.floor(deltaMs * (this.board.clock / 1000));
 
-    for (let i = 0; i < cyclesToRun; i++) {
-      avrInstruction(this.cpu);
-      this.cpu.tick();
+    if (cyclesToRun > 0) {
+      this.lastTime += cyclesToRun / (this.board.clock / 1000);
+
+      for (let i = 0; i < cyclesToRun; i++) {
+          avrInstruction(this.cpu);
+          this.cpu.tick();
+      }
     }
 
-    requestAnimationFrame(this.loop);
+    // Yield to the event loop immediately to allow UI events to be processed
+    this.simTimeoutId = setTimeout(this.runSimulation, 0);
   };
+
+  private scheduleUiUpdate = () => {
+    if (!this.running) return;
+
+    this.flushUpdates();
+    this.animationFrameId = requestAnimationFrame(this.scheduleUiUpdate);
+  };
+
+  private flushUpdates() {
+    // Notify about pin changes
+    if (this.dirtyPins.size > 0) {
+      this.dirtyPins.forEach((pin) => {
+        this.onPinChange?.(pin, this.getPinState(pin));
+      });
+      this.dirtyPins.clear();
+    }
+
+    // Notify about UART data
+    if (this.uartBuffer.length > 0) {
+      this.uartBuffer.forEach((byte) => {
+        this.onUartByte?.(byte);
+      });
+      this.uartBuffer = [];
+    }
+
+    // Notify about general state update (PC, cycles)
+    this.onStateUpdate?.({
+        pc: this.cpu.pc,
+        cycles: this.cpu.cycles
+    });
+  }
 
   /**
    * Exposes a timer instance (0, 1, or 2) so callers (e.g. PWM/servo
@@ -172,5 +261,24 @@ export class SimulationEngine {
    */
   public serialWrite(byte: number) {
     this.usart.writeByte(byte);
+  }
+
+  /**
+   * Sets the state of a specific Arduino pin from an external source.
+   */
+  public setPinState(pin: string | number, state: PinState) {
+    const pinMap = this.board.simulation.pinMap || UNO_PIN_MAP;
+    const mapping = pinMap[pin];
+    if (!mapping) return;
+
+    let port: AVRIOPort;
+    switch (mapping.port) {
+      case 'B': port = this.portB; break;
+      case 'C': port = this.portC; break;
+      case 'D': port = this.portD; break;
+      default: return;
+    }
+
+    port.setPin(mapping.bit, state === 'HIGH');
   }
 }

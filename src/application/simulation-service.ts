@@ -1,38 +1,23 @@
-import { SimulationEngine, PinState } from "../simulator/engine";
-import { BoardDefinition } from "../domain/models";
+import { simulationManager } from '../simulator/SimulationManager';
+import { BoardDefinition, Circuit } from '../domain/models';
 
-export class SimulationService {
-  private static engine: SimulationEngine | null = null;
+export * from '../simulator/SimulationManager';
+export * from '../simulator/ISimulationManager';
 
-  static start(
-    hex: string,
-    board: BoardDefinition,
-    onPinChange: (pin: string | number, state: PinState) => void,
-    onUartByte: (byte: number) => void
-  ) {
-    this.stop();
-    this.engine = SimulationEngine.fromHex(hex, board);
-    this.engine.onPinChange = onPinChange;
-    this.engine.onUartByte = onUartByte;
-    this.engine.start();
-  }
-
-  static stop() {
-    if (this.engine) {
-      this.engine.pause();
-      this.engine = null;
+/**
+ * @deprecated Use simulationManager from '../simulator/SimulationManager' directly.
+ * This is kept for backward compatibility.
+ */
+export const SimulationService = {
+  start: (hex: string, board: BoardDefinition, circuit: Circuit, onPinChange: any, onUartByte: any) => {
+    const diagnostics = simulationManager.loadFirmware(hex, board, circuit, onPinChange, onUartByte);
+    const hasErrors = diagnostics.some(d => d.severity === 'error');
+    if (!hasErrors) {
+      simulationManager.start();
     }
-  }
-
-  static writeSerial(data: string) {
-    if (this.engine) {
-      for (let i = 0; i < data.length; i++) {
-        this.engine.serialWrite(data.charCodeAt(i));
-      }
-    }
-  }
-
-  static isRunning(): boolean {
-    return this.engine !== null;
-  }
-}
+    return diagnostics;
+  },
+  stop: () => simulationManager.stop(),
+  writeSerial: (data: string) => simulationManager.writeSerial(data),
+  isRunning: () => simulationManager.readState().running,
+};
