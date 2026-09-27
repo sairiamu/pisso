@@ -41,14 +41,14 @@ export abstract class BaseSimulationAdapter implements ISimulationAdapter {
 
   constructor(public readonly componentId: string) {}
 
-  initialize(netlist: SimulationNetlist): void {}
-  update(netlist: SimulationNetlist): void {}
+  initialize(_netlist: SimulationNetlist): void {}
+  update(_netlist: SimulationNetlist): void {}
 
   read(pinName: string): PinState {
     return this.drivenPins[pinName] || 'FLOAT';
   }
 
-  write(pinName: string, state: PinState): void {}
+  write(_pinName: string, _state: PinState): void {}
 
   reset(): void {
     this.drivenPins = {};

@@ -25,12 +25,6 @@ export class SimulationNetlist {
     const visitedPins = new Set<string>();
     let netCount = 0;
 
-    for (const component of circuit.components) {
-      // We need to know all possible pins for this component to ensure they all get assigned to a net
-      // For now, we'll rely on the pins that have connections.
-      // A better approach would be to use the ComponentDefinition to get all pins.
-    }
-
     // Iterate through all connections to find all participating pins
     const allPins: PinReference[] = [];
     circuit.connections.forEach(conn => {
@@ -40,7 +34,6 @@ export class SimulationNetlist {
 
     // Also include pins from the board if we know which one it is
     if (boardId) {
-        const board = circuit.components.find(c => c.id === boardId);
         // ... boards might have pins that aren't connected yet but we want to track ...
     }
 

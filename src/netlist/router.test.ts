@@ -1,90 +1,68 @@
-import { routeOrthogonal, Point, RouterObstacles } from "../domain/wire-router";
+import { describe, it, expect } from 'vitest';
+import { routeOrthogonal, Point, RouterObstacles } from '../domain/wire-router';
 
-function testRouter() {
-  console.log("Running Router Tests...");
-
-  // Test 1: No obstacles - straight line
-  {
+describe('Wire Router', () => {
+  it('should find straight path with no obstacles', () => {
     const start: Point = { x: 0, y: 0 };
     const end: Point = { x: 100, y: 0 };
     const obstacles: RouterObstacles = { parts: [], routedSegments: [] };
     const result = routeOrthogonal(start, end, obstacles);
-    console.assert(result.found, "FAILED: Path should be found with no obstacles");
-    console.assert(result.points.length === 2, "FAILED: Straight line should have 2 points");
-    console.assert(result.points[0].x === 0 && result.points[0].y === 0, "FAILED: Start point mismatch");
-    console.assert(result.points[1].x === 100 && result.points[1].y === 0, "FAILED: End point mismatch");
-  }
+    expect(result.found).toBe(true);
+    expect(result.points.length).toBe(2);
+    expect(result.points[0]).toEqual({ x: 0, y: 0 });
+    expect(result.points[1]).toEqual({ x: 100, y: 0 });
+  });
 
-  // Test 2: Single rectangular obstacle between start and end
-  {
+  it('should find path around rectangular obstacle', () => {
     const start: Point = { x: 0, y: 0 };
     const end: Point = { x: 100, y: 0 };
-    // Obstacle blocking the straight path (40-60 on X, -20 to 20 on Y)
     const obstacles: RouterObstacles = {
       parts: [{ x: 40, y: -20, width: 20, height: 40 }],
-      routedSegments: []
+      routedSegments: [],
     };
     const result = routeOrthogonal(start, end, obstacles);
-    console.assert(result.found, "FAILED: Path should be found around obstacle");
-
-    // Check if any point or segment goes through the obstacle
+    expect(result.found).toBe(true);
     for (const p of result.points) {
       const inRect = p.x > 40 && p.x < 60 && p.y > -20 && p.y < 20;
-      console.assert(!inRect, `FAILED: Path point (${p.x}, ${p.y}) is inside obstacle`);
+      expect(inRect).toBe(false);
     }
-  }
+  });
 
-  // Test 3: Existing routed segment preferred avoidance
-  {
+  it('should avoid existing routed segments', () => {
     const start: Point = { x: 0, y: 0 };
     const end: Point = { x: 100, y: 0 };
-    // Existing wire on the straight path
     const obstacles: RouterObstacles = {
       parts: [],
-      routedSegments: [[{ x: 0, y: 0 }, { x: 100, y: 0 }]]
+      routedSegments: [[{ x: 0, y: 0 }, { x: 100, y: 0 }]],
     };
     const result = routeOrthogonal(start, end, obstacles);
-    console.assert(result.found, "FAILED: Path should be found despite existing segment");
-
-    // It should avoid the existing segment if possible (e.g. by going around it)
-    // A straight line would have a cost of 50 * 100 = 5000 + (some grid stuff)
-    // Going around by 20px (e.g. 0,0 -> 0,20 -> 100,20 -> 100,0) would have cost 100 + 20 + 20 = 140 + turn costs.
-    // So it should definitely NOT be a straight line.
+    expect(result.found).toBe(true);
     const isStraightLine = result.points.length === 2 && result.points[0].y === 0 && result.points[1].y === 0;
-    console.assert(!isStraightLine, "FAILED: Router should avoid existing segment");
-  }
+    expect(isStraightLine).toBe(false);
+  });
 
-  // Test 4: Start/end adjacent to own parts
-  {
-    const start: Point = { x: 50, y: 50 }; // on edge of part
+  it('should find path when start/end are on part edges', () => {
+    const start: Point = { x: 50, y: 50 };
     const end: Point = { x: 150, y: 50 };
     const obstacles: RouterObstacles = {
       parts: [
-        { x: 0, y: 0, width: 50, height: 50 }, // start is at corner/edge
-        { x: 150, y: 0, width: 50, height: 50 } // end is at corner/edge
+        { x: 0, y: 0, width: 50, height: 50 },
+        { x: 150, y: 0, width: 50, height: 50 },
       ],
-      routedSegments: []
+      routedSegments: [],
     };
     const result = routeOrthogonal(start, end, obstacles);
-    console.assert(result.found, "FAILED: Path should be found when start/end are on part edges");
-  }
+    expect(result.found).toBe(true);
+  });
 
-  // Test 5: Exit direction hints
-  {
+  it('should respect exit direction hints', () => {
     const start: Point = { x: 50, y: 50 };
     const end: Point = { x: 150, y: 150 };
     const obstacles: RouterObstacles = { parts: [], routedSegments: [] };
-    const result = routeOrthogonal(start, end, obstacles, 10, { startDirection: "right" });
-    console.assert(result.found, "FAILED: Path should be found with hints");
-    console.assert(result.points.length >= 2, "FAILED: Path should have at least 2 points");
-    // The first segment should be purely horizontal to the right
-    const p0 = result.points[0];
-    const p1 = result.points[1];
-    console.assert(p1.x > p0.x, "FAILED: First segment should move right (positive X)");
-    console.assert(p1.y === p0.y, "FAILED: First segment should be purely horizontal");
-  }
-
-  console.log("All Router Tests Passed!");
-}
-
-export const runRouterTests = testRouter;
+    const result = routeOrthogonal(start, end, obstacles, 10, { startDirection: 'right' });
+    expect(result.found).toBe(true);
+    expect(result.points.length).toBeGreaterThanOrEqual(2);
+    expect(result.points[1].x).toBeGreaterThan(result.points[0].x);
+    expect(result.points[1].y).toBe(result.points[0].y);
+  });
+});

@@ -7,7 +7,6 @@ import { BoardInfo, ProjectFile, BuildResult } from "../domain/models";
 import { ProjectManager } from "../application/ProjectManager";
 import { CompilerService } from "../application/compiler-service";
 import { BuildManager } from "../application/BuildManager";
-import { LibraryManager } from "../application/LibraryManager";
 import { getBoardByFqbn } from "../domain/boards";
 
 interface UploadButtonProps {

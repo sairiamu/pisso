@@ -95,6 +95,7 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         lastBuildResult,
         serialConnected,
         serialSource,
+        storeState,
         setPinState,
         appendSerialOutput,
         clearSerialOutput,

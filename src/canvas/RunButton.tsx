@@ -4,7 +4,6 @@ import { FileEntry } from "../App";
 import { BoardInfo, BuildResult, Project, ProjectFile } from "../domain/models";
 import { ProjectManager } from "../application/ProjectManager";
 import { BuildManager } from "../application/BuildManager";
-import { LibraryManager } from "../application/LibraryManager";
 
 interface RunButtonProps {
   projectPath: string | null;

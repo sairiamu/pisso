@@ -5,6 +5,12 @@ import { ProjectFile } from '../domain/models';
 
 vi.mock('./compiler-service');
 vi.mock('./project-service');
+vi.mock('./LibraryManager', () => ({
+  LibraryManager: {
+    resolveDependencies: vi.fn().mockResolvedValue('none')
+  },
+  LibraryDiagnosticError: class extends Error {}
+}));
 vi.mock('../parts', () => ({
   PARTS_REGISTRY: {
     get: vi.fn((id) => {
@@ -116,9 +122,14 @@ int add(int a, int b) {
       }
     };
 
-    vi.mocked(CompilerService.compile).mockRejectedValue(
-        '/test/fail/src/sketch.ino:1:16: error: \'error_here\' was not declared in this scope'
-    );
+    vi.mocked(CompilerService.compile).mockResolvedValue({
+      success: false,
+      hex: '',
+      flash_used: 0,
+      ram_used: 0,
+      stdout: '',
+      stderr: '/test/fail/src/sketch.ino:1:16: error: \'error_here\' was not declared in this scope'
+    });
 
     const result = await BuildManager.build(project);
 

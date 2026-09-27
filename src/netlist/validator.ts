@@ -1,5 +1,5 @@
-import { Diagram, PinRef, Connection } from "./types";
-import { generateNetlist, Net } from "./generator";
+import { Diagram, PinRef } from "./types";
+import { generateNetlist } from "./generator";
 import { PARTS_REGISTRY } from "../parts";
 import { PinType } from "../parts/types";
 
