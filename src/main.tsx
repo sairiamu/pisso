@@ -7,14 +7,11 @@ if (!("Buffer" in globalThis)) {
 }
 
 import ReactDOM from "react-dom/client";
-import App from "./App";
-import { SimulationProvider } from "./simulator/SimulationContext";
-import { CircuitProvider } from "./domain/CircuitContext";
+import App from "./app/App";
+import { AppProviders } from "./app/providers/AppProviders";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <SimulationProvider>
-    <CircuitProvider>
-      <App />
-    </CircuitProvider>
-  </SimulationProvider>
+  <AppProviders>
+    <App />
+  </AppProviders>
 );
