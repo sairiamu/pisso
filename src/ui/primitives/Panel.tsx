@@ -10,43 +10,39 @@ interface PanelProps {
   className?: string;
 }
 
-const Screw: React.FC<{ style: React.CSSProperties }> = ({ style }) => (
-  <div
-    style={{
-      position: "absolute",
-      width: PANEL.SCREW.SIZE,
-      height: PANEL.SCREW.SIZE,
-      borderRadius: "50%",
-      backgroundColor: PANEL.SCREW.COLOR,
-      opacity: PANEL.SCREW.OPACITY,
-      boxShadow: "inset -1px -1px 1px rgba(0,0,0,0.4), 0.5px 0.5px 1px rgba(255,255,255,0.1)",
-      pointerEvents: "none",
-      ...style,
-    }}
-  />
-);
-
 export const PanelHeader: React.FC<{ children: React.ReactNode; style?: React.CSSProperties }> = ({ children, style }) => (
-  <div style={{ padding: "12px 16px", borderBottom: `1px solid ${COLORS.GRAPHITE_500}`, ...style }}>
+  <div style={{
+    padding: "8px 12px",
+    borderBottom: `1px solid ${COLORS.BORDER}`,
+    backgroundColor: COLORS.GRAPHITE_500,
+    fontSize: "12px",
+    fontWeight: 600,
+    letterSpacing: "0.03em",
+    ...style
+  }}>
     {children}
   </div>
 );
 
 export const PanelBody: React.FC<{ children: React.ReactNode; style?: React.CSSProperties }> = ({ children, style }) => (
-  <div style={{ padding: "16px", ...style }}>
+  <div style={{ padding: "12px", ...style }}>
     {children}
   </div>
 );
 
 export const PanelFooter: React.FC<{ children: React.ReactNode; style?: React.CSSProperties }> = ({ children, style }) => (
-  <div style={{ padding: "12px 16px", borderTop: `1px solid ${COLORS.GRAPHITE_500}`, ...style }}>
+  <div style={{
+    padding: "8px 12px",
+    borderTop: `1px solid ${COLORS.BORDER}`,
+    backgroundColor: COLORS.GRAPHITE_500,
+    ...style
+  }}>
     {children}
   </div>
 );
 
 export const Panel: React.FC<PanelProps> = ({
   children,
-  showScrews = true,
   isActive = false,
   style,
   className,
@@ -55,29 +51,17 @@ export const Panel: React.FC<PanelProps> = ({
     position: "relative",
     backgroundColor: COLORS.GRAPHITE_700,
     borderRadius: PANEL.RADIUS,
-    boxShadow: isActive
-      ? `${PANEL.INSET_SHADOW}, 0 0 0 ${PANEL.ACCENT_GLOW.WIDTH} ${PANEL.ACCENT_GLOW.COLOR}`
-      : PANEL.INSET_SHADOW,
+    border: `1px solid ${isActive ? COLORS.SOLDER_COPPER : COLORS.BORDER}`,
     color: COLORS.WARM_WHITE,
-    transition: "box-shadow 0.2s ease-in-out",
+    overflow: "hidden",
+    boxSizing: "border-box",
     ...style,
   };
 
-  const screwOffset = "8px";
-
   return (
     <div style={containerStyle} className={className}>
-      {showScrews && (
-        <>
-          <Screw style={{ top: screwOffset, left: screwOffset }} />
-          <Screw style={{ top: screwOffset, right: screwOffset }} />
-          <Screw style={{ bottom: screwOffset, left: screwOffset }} />
-          <Screw style={{ bottom: screwOffset, right: screwOffset }} />
-        </>
-      )}
       <div style={{
         position: "relative",
-        zIndex: 1,
         height: "100%",
         display: style?.display === "flex" ? "flex" : "block",
         flexDirection: style?.flexDirection,

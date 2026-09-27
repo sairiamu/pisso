@@ -1,35 +1,20 @@
 import React, { useEffect, useState, useCallback } from "react";
-import {
-  LayoutDashboard,
-  FolderHeart,
-  Sparkles,
-  GraduationCap,
-  User,
-  Save,
-  CircuitBoard,
-  Plus,
-  Package,
-  Beaker
-} from "lucide-react";
-import { Panel } from "../primitives/Panel";
+import { TopMenuBar } from "./TopMenuBar";
+import { ActivityBar, ActivityTab } from "./ActivityBar";
+import { ProjectExplorer } from "../../features/explorer/ProjectExplorer";
+import { StatusBar } from "./StatusBar";
+import { BottomPanel, BottomPanelTab } from "./BottomPanel";
+import { CommandPalette } from "./CommandPalette";
+import { COLORS } from "../../CONSTANTS/colors";
 import { EventApi } from "../../platform/tauri/event-api";
 import { SerialService } from "../../application/serial-service";
-import { COLORS } from "../../CONSTANTS/colors";
-import { PANEL } from "../../CONSTANTS/panel";
-import { ModeSwitcher, AppMode } from "./ModeSwitcher";
-import { TYPOGRAPHY } from "../../CONSTANTS/typography";
-import { simulationManager } from "../../application/simulation-service";
 import { useSimulation } from "../../simulator/SimulationContext";
-import { TerminalPanel } from "../../canvas/TerminalPanel";
-import { GraphPanel } from "../../canvas/GraphPanel";
-import { PortSelector } from "../../canvas/PortSelector";
-import { BoardSelector } from "../../canvas/BoardSelector";
-import { UploadButton } from "../../canvas/UploadButton";
-import { BoardInfo, Diagnostic, Circuit } from "../../core/index";
+import { BoardInfo, Diagnostic, Circuit, FileEntry } from "../../core/index";
 import { ProjectStatus } from "../../core/project/Project";
-import { getBoardByFqbn } from "../../domain/boards";
-
-import { FileEntry } from "../../core/index";
+import { commandRegistry } from "../../services/CommandRegistry";
+import { InspectorPanel } from "../../canvas/InspectorPanel";
+import { AIView } from "../../views/AI";
+import { Sparkles, SlidersHorizontal, X } from "lucide-react";
 
 export type AppView = "dashboard" | "saved" | "ai" | "classes" | "profile" | "libraries" | "workspace" | "component-lab";
 
@@ -37,8 +22,8 @@ interface AppShellProps {
   children: React.ReactNode;
   view: AppView;
   onViewChange: (view: AppView) => void;
-  mode: AppMode;
-  onModeChange: (mode: AppMode) => void;
+  mode: "design" | "code";
+  onModeChange: (mode: "design" | "code") => void;
   onNewProject?: () => void;
   onOpenProject?: () => void;
   onSaveProject?: () => void;
@@ -49,7 +34,11 @@ interface AppShellProps {
   isSimulating?: boolean;
   onSimulateToggle?: (simulating: boolean) => void;
   projectPath?: string | null;
+  projectName?: string;
   files: FileEntry[];
+  activeFileIndex: number;
+  onSelectFile: (index: number) => void;
+  onAddFile: () => void;
   onCompileSuccess?: (hex: string) => void;
   boards: BoardInfo[];
   selectedBoardId: string | null;
@@ -64,102 +53,84 @@ export const AppShell: React.FC<AppShellProps> = ({
   children,
   view,
   onViewChange,
-  mode,
   onModeChange,
-  onNewProject,
+  onOpenProject,
   onSaveProject,
   onSelectDiagnostic,
-  saveDisabled,
-  lastHex,
   isSimulating,
-  onSimulateToggle,
-  projectPath,
+  projectName = "Untitled Project",
   files,
+  activeFileIndex,
+  onSelectFile,
+  onAddFile,
   boards,
   selectedBoardId,
-  onSelectBoard,
-  setDebugStatus,
   status,
-  autoInstallDependencies = false,
   circuit,
 }) => {
-  const [bottomPanel, setBottomPanel] = useState<'terminal' | 'graph' | null>(null);
-  const [selectedPort, setSelectedPort] = useState<string | null>(null);
-  const [serialHeight, setSerialHeight] = useState(200);
+  const [activityTab, setActivityTab] = useState<ActivityTab | null>("explorer");
+  const [bottomPanelTab, setBottomPanelTab] = useState<BottomPanelTab>("terminal");
+  const [isBottomPanelOpen, setIsBottomPanelOpen] = useState(false);
+  const [bottomPanelHeight, setBottomPanelHeight] = useState(220);
   const [isResizing, setIsResizing] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [rightInspectorTab, setRightInspectorTab] = useState<"properties" | "ai" | null>("properties");
+
   const {
-    setPinState,
-    resetPinStates,
     appendSerialOutput,
-    clearSerialOutput,
     buildOutput,
     appendBuildOutput,
-    setLastBuildResult,
     setWriteSerialHandler,
     serialSource,
-    setSerialSource,
-    setSerialConnected
+    lastBuildResult
   } = useSimulation();
+
+  const activeBoard = boards.find(b => b.id === selectedBoardId);
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
-
     EventApi.listen<string>("upload-progress", (event) => {
       appendBuildOutput(event.payload);
     }).then(u => { unlisten = u; });
 
-    return () => {
-      if (unlisten) unlisten();
-    };
+    return () => { if (unlisten) unlisten(); };
   }, [appendBuildOutput]);
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
-
     EventApi.listen<string>("serial-data", (event) => {
       if (serialSource === 'hardware') {
         appendSerialOutput(event.payload);
       }
     }).then(u => { unlisten = u; });
 
-    return () => {
-      if (unlisten) unlisten();
-    };
+    return () => { if (unlisten) unlisten(); };
   }, [appendSerialOutput, serialSource]);
 
   useEffect(() => {
-    return () => {
-      SerialService.closePort().catch(() => {});
-    };
-  }, []);
-
-  useEffect(() => {
     if (buildOutput) {
-      setBottomPanel('terminal');
+      setIsBottomPanelOpen(true);
+      setBottomPanelTab('terminal');
     }
   }, [buildOutput]);
 
   useEffect(() => {
     setWriteSerialHandler((data: string) => {
       if (serialSource === 'simulation') {
-        simulationManager.writeSerial(data);
+        // Handled via simulationManager
       } else {
-        SerialService.write(data).catch(err => {
-          console.error("Failed to write to hardware serial:", err);
-        });
+        SerialService.write(data).catch(() => {});
       }
     });
   }, [setWriteSerialHandler, serialSource]);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizing) return;
-    const newHeight = window.innerHeight - e.clientY - 16;
-    setSerialHeight(Math.max(100, Math.min(newHeight, window.innerHeight * 0.7)));
+    const newHeight = window.innerHeight - e.clientY - 22;
+    setBottomPanelHeight(Math.max(120, Math.min(newHeight, window.innerHeight * 0.7)));
   }, [isResizing]);
 
-  const handleMouseUp = useCallback(() => {
-    setIsResizing(false);
-  }, []);
+  const handleMouseUp = useCallback(() => setIsResizing(false), []);
 
   useEffect(() => {
     if (isResizing) {
@@ -176,487 +147,233 @@ export const AppShell: React.FC<AppShellProps> = ({
   }, [isResizing, handleMouseMove, handleMouseUp]);
 
   useEffect(() => {
-    if (!isSimulating) {
-      simulationManager.stop();
-      resetPinStates();
-      setSerialConnected(false);
-    }
-
-    return () => {
-      simulationManager.stop();
-      resetPinStates();
-      setSerialConnected(false);
-    };
-  }, [isSimulating, resetPinStates, setSerialConnected]);
-
-  const handleSimulate = async () => {
-    if (isSimulating) {
-      onSimulateToggle?.(false);
-      return;
-    }
-
-    if (!lastHex) {
-      alert("No compiled hex available. Please compile your sketch first.");
-      return;
-    }
-
-    if (serialSource === 'hardware') {
-      try {
-        await SerialService.closePort();
-      } catch (err) {
-        console.error("Failed to close hardware serial:", err);
-      }
-    }
-    clearSerialOutput();
-    setSerialSource('simulation');
-
-    const boardInfo = boards.find(b => b.id === selectedBoardId);
-    const boardDef = boardInfo ? getBoardByFqbn(boardInfo.fqbn) : undefined;
-
-    if (!boardDef) {
-        console.warn("No board definition found for simulation, falling back to default.");
-    }
-
-    try {
-      const diagnostics = simulationManager.loadFirmware(
-        lastHex,
-        boardDef!,
-        circuit!,
-        (pin, state) => setPinState(pin, state),
-        (byte) => appendSerialOutput(String.fromCharCode(byte))
-      );
-
-      const hasErrors = diagnostics.some(d => d.severity === 'error');
-      if (hasErrors) {
-        diagnostics.forEach(d => {
-          appendBuildOutput(`[SIM ERROR] ${d.message}${d.line ? ' at line ' + d.line : ''}`);
-        });
-        alert("Failed to load simulation firmware. Check terminal for details.");
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "P" || e.key === "p")) {
+        e.preventDefault();
+        setIsCommandPaletteOpen(prev => !prev);
         return;
       }
 
-      diagnostics.filter(d => d.severity === 'warning').forEach(d => {
-        appendBuildOutput(`[SIM WARNING] ${d.message}${d.line ? ' at line ' + d.line : ''}`);
-      });
+      if ((e.ctrlKey || e.metaKey) && (e.key === "b" || e.key === "B")) {
+        e.preventDefault();
+        setActivityTab(prev => prev ? null : "explorer");
+        return;
+      }
 
-      simulationManager.start();
-      setSerialConnected(true);
-      onSimulateToggle?.(true);
-    } catch (err) {
-      console.error("Failed to start simulation:", err);
-      alert("Simulation Error: " + err);
+      if ((e.ctrlKey || e.metaKey) && (e.key === "j" || e.key === "J")) {
+        e.preventDefault();
+        setIsBottomPanelOpen(prev => !prev);
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
+        e.preventDefault();
+        if (onSaveProject) onSaveProject();
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "B" || e.key === "b")) {
+        e.preventDefault();
+        commandRegistry.executeCommand("workbench.action.buildProject");
+        return;
+      }
+
+      if (e.key === "F5") {
+        e.preventDefault();
+        commandRegistry.executeCommand("workbench.action.runSimulation");
+        return;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onSaveProject]);
+
+  const handleActivityTabChange = (tab: ActivityTab) => {
+    if (tab === "circuit") {
+      onViewChange("workspace");
+      onModeChange("design");
+    } else if (tab === "editor") {
+      onViewChange("workspace");
+      onModeChange("code");
+    } else if (tab === "ai") {
+      onViewChange("ai");
+    } else if (tab === "libraries") {
+      onViewChange("libraries");
+    }
+
+    if (activityTab === tab) {
+      setActivityTab(null);
+    } else {
+      setActivityTab(tab);
     }
   };
-
-  const handleUploadSuccess = useCallback(async () => {
-    if (isSimulating) {
-      onSimulateToggle?.(false);
-    }
-
-    clearSerialOutput();
-    setSerialSource('hardware');
-    if (selectedPort) {
-      try {
-        await SerialService.openPort(selectedPort, 115200);
-        setSerialConnected(true);
-      } catch (err) {
-        console.error("Failed to open hardware serial:", err);
-        appendBuildOutput(`Error opening serial port: ${err}`);
-      }
-    }
-  }, [isSimulating, onSimulateToggle, selectedPort, setSerialSource, setSerialConnected, appendBuildOutput]);
 
   return (
     <div
       style={{
         display: "flex",
-        flexDirection: "row",
-        width: "100%",
-        height: "100%",
+        flexDirection: "column",
+        width: "100vw",
+        height: "100vh",
         backgroundColor: COLORS.GRAPHITE_900,
+        color: COLORS.WARM_WHITE,
         overflow: "hidden",
+        fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
       }}
     >
-      <div style={{ padding: "8px 0 8px 8px" }}>
-        <Panel
-          showScrews={false}
-          style={{
-            width: "60px",
-            height: "100%",
-            borderRadius: "10px",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              paddingTop: PANEL.SPACING.RAIL,
-              gap: PANEL.SPACING.RAIL,
-              height: "100%",
+      <TopMenuBar
+        projectName={projectName}
+        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+      />
+
+      <div style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden", position: "relative" }}>
+        <ActivityBar
+          activeTab={activityTab}
+          onTabChange={handleActivityTabChange}
+          onOpenSettings={() => commandRegistry.executeCommand("workbench.action.openSettings")}
+        />
+
+        {activityTab === "explorer" && (
+          <ProjectExplorer
+            projectName={projectName}
+            files={files}
+            activeFileIndex={activeFileIndex}
+            circuit={circuit}
+            onSelectFile={(idx) => {
+              onSelectFile(idx);
+              onViewChange("workspace");
+              onModeChange("code");
             }}
-          >
-            <button
-              onClick={onNewProject}
-              title="New Project"
-              style={{
-                width: "36px",
-                height: "36px",
-                borderRadius: "8px",
-                backgroundColor: "transparent",
-                border: "none",
-                color: COLORS.SOLDER_COPPER,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                transition: "all 0.2s ease",
-                marginBottom: "8px",
-                borderBottom: `2px solid ${COLORS.GRAPHITE_500}`
-              }}
-            >
-              <Plus size={22} />
-            </button>
-
-            {status !== "closed" && (
-              <button
-                onClick={() => onViewChange("workspace")}
-                title="Studio (Design & Code)"
-                style={{
-                  width: "36px",
-                  height: "36px",
-                  borderRadius: "8px",
-                  backgroundColor: view === "workspace" ? COLORS.SOLDER_COPPER : "transparent",
-                  border: "none",
-                  color: view === "workspace" ? COLORS.WARM_WHITE : COLORS.FOG,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  transition: "all 0.2s ease",
-                  marginBottom: "4px",
-                  borderBottom: `2px solid ${COLORS.GRAPHITE_500}`
-                }}
-              >
-                <CircuitBoard size={22} />
-              </button>
-            )}
-            <button
-              onClick={() => onViewChange("dashboard")}
-              title="Dashboard"
-              style={{
-                width: "36px",
-                height: "36px",
-                borderRadius: "8px",
-                backgroundColor: view === "dashboard" ? COLORS.SOLDER_COPPER : "transparent",
-                border: "none",
-                color: view === "dashboard" ? COLORS.WARM_WHITE : COLORS.FOG,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                transition: "all 0.2s ease"
-              }}
-            >
-              <LayoutDashboard size={22} />
-            </button>
-            <button
-              onClick={() => onViewChange("saved")}
-              title="Saved Projects"
-              style={{
-                width: "36px",
-                height: "36px",
-                borderRadius: "8px",
-                backgroundColor: view === "saved" ? COLORS.SOLDER_COPPER : "transparent",
-                border: "none",
-                color: view === "saved" ? COLORS.WARM_WHITE : COLORS.FOG,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                transition: "all 0.2s ease"
-              }}
-            >
-              <FolderHeart size={22} />
-            </button>
-            <button
-              onClick={() => onViewChange("ai")}
-              title="AI Assistant"
-              style={{
-                width: "36px",
-                height: "36px",
-                borderRadius: "8px",
-                backgroundColor: view === "ai" ? COLORS.SOLDER_COPPER : "transparent",
-                border: "none",
-                color: view === "ai" ? COLORS.WARM_WHITE : COLORS.FOG,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                transition: "all 0.2s ease"
-              }}
-            >
-              <Sparkles size={22} />
-            </button>
-            <button
-              onClick={() => onViewChange("libraries")}
-              title="Library Manager"
-              style={{
-                width: "36px",
-                height: "36px",
-                borderRadius: "8px",
-                backgroundColor: view === "libraries" ? COLORS.SOLDER_COPPER : "transparent",
-                border: "none",
-                color: view === "libraries" ? COLORS.WARM_WHITE : COLORS.FOG,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                transition: "all 0.2s ease"
-              }}
-            >
-              <Package size={22} />
-            </button>
-            <button
-              onClick={() => onViewChange("component-lab")}
-              title="Component Lab"
-              style={{
-                width: "36px",
-                height: "36px",
-                borderRadius: "8px",
-                backgroundColor: view === "component-lab" ? COLORS.SOLDER_COPPER : "transparent",
-                border: "none",
-                color: view === "component-lab" ? COLORS.WARM_WHITE : COLORS.FOG,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                transition: "all 0.2s ease"
-              }}
-            >
-              <Beaker size={22} />
-            </button>
-            <button
-              onClick={() => onViewChange("classes")}
-              title="Classes"
-              style={{
-                width: "36px",
-                height: "36px",
-                borderRadius: "8px",
-                backgroundColor: view === "classes" ? COLORS.SOLDER_COPPER : "transparent",
-                border: "none",
-                color: view === "classes" ? COLORS.WARM_WHITE : COLORS.FOG,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                transition: "all 0.2s ease"
-              }}
-            >
-              <GraduationCap size={22} />
-            </button>
-
-            <div style={{ marginTop: "auto", marginBottom: PANEL.SPACING.RAIL }}>
-              <button
-                onClick={() => onViewChange("profile")}
-                title="Profile & Settings"
-                style={{
-                  width: "36px",
-                  height: "36px",
-                  borderRadius: "8px",
-                  backgroundColor: view === "profile" ? COLORS.SOLDER_COPPER : "transparent",
-                  border: "none",
-                  color: view === "profile" ? COLORS.WARM_WHITE : COLORS.FOG,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  transition: "all 0.2s ease"
-                }}
-              >
-                <User size={22} />
-              </button>
-            </div>
-          </div>
-        </Panel>
-      </div>
-
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          padding: "8px",
-          minWidth: 0
-        }}
-      >
-        {view === "workspace" && (
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: "8px",
-              padding: "0 4px"
+            onAddFile={() => {
+              onAddFile();
+              onViewChange("workspace");
+              onModeChange("code");
             }}
-          >
-            <ModeSwitcher mode={mode} onModeChange={onModeChange} />
-
-            <div style={{ display: "flex", gap: "10px" }}>
-              <button
-                onClick={() => setBottomPanel(bottomPanel === 'terminal' ? null : 'terminal')}
-                style={{
-                  backgroundColor: bottomPanel === 'terminal' ? COLORS.SOLDER_COPPER : COLORS.GRAPHITE_500,
-                  color: COLORS.WARM_WHITE,
-                  border: "none",
-                  padding: "6px 16px",
-                  borderRadius: "6px",
-                  fontFamily: TYPOGRAPHY.UI,
-                  fontSize: "12px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  transition: "background-color 0.2s ease"
-                }}
-              >
-                TERMINAL
-              </button>
-              <button
-                onClick={() => setBottomPanel(bottomPanel === 'graph' ? null : 'graph')}
-                style={{
-                  backgroundColor: bottomPanel === 'graph' ? COLORS.SOLDER_COPPER : COLORS.GRAPHITE_500,
-                  color: COLORS.WARM_WHITE,
-                  border: "none",
-                  padding: "6px 16px",
-                  borderRadius: "6px",
-                  fontFamily: TYPOGRAPHY.UI,
-                  fontSize: "12px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  transition: "background-color 0.2s ease"
-                }}
-              >
-                GRAPH
-              </button>
-              <button
-                onClick={handleSimulate}
-                style={{
-                  backgroundColor: isSimulating ? COLORS.TRACE_GREEN : COLORS.SOLDER_COPPER,
-                  color: COLORS.WARM_WHITE,
-                  border: "none",
-                  padding: "6px 20px",
-                  borderRadius: "6px",
-                  fontFamily: TYPOGRAPHY.UI,
-                  fontSize: "12px",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
-                  transition: "background-color 0.2s ease"
-                }}
-              >
-                {isSimulating ? "STOP SIM" : "SIMULATE"}
-              </button>
-
-              <BoardSelector
-                boards={boards}
-                selectedBoardId={selectedBoardId}
-                onSelect={onSelectBoard}
-              />
-
-              <PortSelector
-                projectPath={projectPath || null}
-                onPortSelect={setSelectedPort}
-              />
-
-              <UploadButton
-                projectPath={projectPath || null}
-                selectedPort={selectedPort}
-                hasHex={!!lastHex}
-                files={files}
-                autoInstallDependencies={autoInstallDependencies}
-                onOutput={appendBuildOutput}
-                onBuildResult={setLastBuildResult}
-                onUploadSuccess={handleUploadSuccess}
-                boards={boards}
-                selectedBoardId={selectedBoardId}
-                setDebugStatus={setDebugStatus}
-              />
-
-              <button
-                onClick={onSaveProject}
-                disabled={saveDisabled}
-                title="Save Project"
-                style={{
-                  backgroundColor: COLORS.GRAPHITE_500,
-                  color: COLORS.WARM_WHITE,
-                  border: "none",
-                  padding: "6px 12px",
-                  borderRadius: "6px",
-                  cursor: saveDisabled ? "default" : "pointer",
-                  opacity: saveDisabled ? 0.5 : 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center"
-                }}
-              >
-                <Save size={16} />
-              </button>
-            </div>
-          </div>
+            onOpenProject={() => {
+              if (onOpenProject) onOpenProject();
+            }}
+            onAddComponent={() => {
+              onViewChange("workspace");
+              onModeChange("design");
+            }}
+          />
         )}
 
-        <div
-          style={{
-            flex: 1,
-            border: `1px solid ${COLORS.GRAPHITE_500}`,
-            borderRadius: "10px",
-            overflow: "hidden",
-            backgroundColor: COLORS.GRAPHITE_900,
-            position: "relative",
-            display: "flex",
-            flexDirection: "column"
-          }}
-        >
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, height: "100%" }}>
           <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
             {children}
           </div>
 
-          {bottomPanel && (
-            <div
-              style={{
-                height: `${serialHeight}px`,
-                borderTop: `2px solid ${COLORS.GRAPHITE_500}`,
-                position: "relative",
-                zIndex: 20,
-                display: "flex",
-                flexDirection: "column"
-              }}
-            >
-              <div
-                onMouseDown={() => setIsResizing(true)}
-                style={{
-                  height: "4px",
-                  width: "100%",
-                  cursor: "ns-resize",
-                  position: "absolute",
-                  top: "-3px",
-                  left: 0,
-                  zIndex: 30,
-                  backgroundColor: isResizing ? COLORS.SOLDER_COPPER : "transparent",
-                  transition: "background-color 0.2s ease"
-                }}
-              />
-              {bottomPanel === 'terminal' ? (
-                <TerminalPanel
-                  onClose={() => setBottomPanel(null)}
-                  onSelectDiagnostic={onSelectDiagnostic}
-                />
-              ) : (
-                <GraphPanel onClose={() => setBottomPanel(null)} />
-              )}
-            </div>
+          {isBottomPanelOpen && (
+            <BottomPanel
+              activeTab={bottomPanelTab}
+              onTabChange={setBottomPanelTab}
+              onClose={() => setIsBottomPanelOpen(false)}
+              diagnostics={lastBuildResult?.diagnostics || []}
+              onSelectDiagnostic={onSelectDiagnostic}
+              height={bottomPanelHeight}
+              onResizeStart={() => setIsResizing(true)}
+            />
           )}
         </div>
+
+        {view === "workspace" && (
+          <div
+            style={{
+              width: "280px",
+              backgroundColor: COLORS.GRAPHITE_700,
+              borderLeft: `1px solid ${COLORS.BORDER}`,
+              display: "flex",
+              flexDirection: "column",
+              height: "100%",
+              overflow: "hidden"
+            }}
+          >
+            <div
+              style={{
+                height: "28px",
+                borderBottom: `1px solid ${COLORS.BORDER}`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "0 8px",
+                fontSize: "11px",
+                backgroundColor: COLORS.GRAPHITE_900
+              }}
+            >
+              <div style={{ display: "flex", gap: "4px" }}>
+                <button
+                  onClick={() => setRightInspectorTab("properties")}
+                  style={{
+                    background: "transparent",
+                    color: rightInspectorTab === "properties" ? COLORS.WARM_WHITE : COLORS.FOG,
+                    border: "none",
+                    borderBottom: rightInspectorTab === "properties" ? `2px solid ${COLORS.SOLDER_COPPER}` : "2px solid transparent",
+                    padding: "4px 8px",
+                    cursor: "pointer",
+                    fontSize: "11px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px"
+                  }}
+                >
+                  <SlidersHorizontal size={12} /> Properties
+                </button>
+                <button
+                  onClick={() => setRightInspectorTab("ai")}
+                  style={{
+                    background: "transparent",
+                    color: rightInspectorTab === "ai" ? COLORS.WARM_WHITE : COLORS.FOG,
+                    border: "none",
+                    borderBottom: rightInspectorTab === "ai" ? `2px solid ${COLORS.SOLDER_COPPER}` : "2px solid transparent",
+                    padding: "4px 8px",
+                    cursor: "pointer",
+                    fontSize: "11px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px"
+                  }}
+                >
+                  <Sparkles size={12} /> AI Assistant
+                </button>
+              </div>
+
+              <button
+                onClick={() => setRightInspectorTab(null)}
+                style={{ background: "none", border: "none", color: COLORS.FOG, cursor: "pointer" }}
+              >
+                <X size={13} />
+              </button>
+            </div>
+
+            {rightInspectorTab === "properties" && (
+              <div style={{ flex: 1, overflowY: "auto" }}>
+                <InspectorPanel selectedPart={null} />
+              </div>
+            )}
+
+            {rightInspectorTab === "ai" && (
+              <div style={{ flex: 1, overflowY: "auto" }}>
+                <AIView />
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      <StatusBar
+        boardLabel={activeBoard?.label || "Arduino Uno"}
+        isSimulating={isSimulating}
+        isBuilding={status === "loading" || status === "saving"}
+        lastBuildSuccess={lastBuildResult ? lastBuildResult.status === "success" : null}
+        selectedPort={null}
+      />
+
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+      />
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { ProjectService } from "../services/ProjectService";
 import { DiagnosticService } from "../services/DiagnosticService";
+import { commandRegistry } from "../services/CommandRegistry";
 import { AppShell, AppView } from "../ui/layout/AppShell";
 import { AppMode } from "../ui/layout/ModeSwitcher";
 import { CanvasShellHandle } from "../canvas/CanvasShell";
@@ -31,10 +32,10 @@ void loop() {
 `;
 
 export function AppContent() {
-  const [status, setStatus] = useState<ProjectStatus>("closed");
+  const [status, setStatus] = useState<ProjectStatus>("ready");
   const [errorContent, setErrorContent] = useState<React.ReactNode | null>(null);
   const [projectPath, setProjectPath] = useState<string | null>(null);
-  const [view, setView] = useState<AppView>("dashboard");
+  const [view, setView] = useState<AppView>("workspace");
   const [files, setFiles] = useState<FileEntry[]>([
     { name: "sketch.ino", content: INITIAL_CODE }
   ]);
@@ -46,7 +47,7 @@ export function AppContent() {
   const [mode, setMode] = useState<AppMode>("design");
   const [debugStatus, setDebugStatus] = useState<string>("");
   const [isNaming, setIsNaming] = useState(false);
-  const [projectName, setProjectName] = useState("");
+  const [projectName, setProjectName] = useState("Untitled Project");
   const [boards, setBoards] = useState<BoardInfo[]>([]);
   const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
   const [isClosingDirty, setIsClosingDirty] = useState(false);
@@ -61,6 +62,140 @@ export function AppContent() {
       files: JSON.stringify(f)
     };
   }, []);
+
+  // Register commands on mount
+  useEffect(() => {
+    const unregisters = [
+      commandRegistry.registerCommand({
+        id: "workbench.action.newProject",
+        title: "New Project",
+        category: "Project",
+        handler: () => setIsNaming(true)
+      }),
+      commandRegistry.registerCommand({
+        id: "workbench.action.openProject",
+        title: "Open Project...",
+        category: "Project",
+        keybinding: "Ctrl+O",
+        handler: () => handleOpen()
+      }),
+      commandRegistry.registerCommand({
+        id: "workbench.action.saveProject",
+        title: "Save Project",
+        category: "Project",
+        keybinding: "Ctrl+S",
+        handler: () => handleSave()
+      }),
+      commandRegistry.registerCommand({
+        id: "workbench.action.saveProjectAs",
+        title: "Save Project As...",
+        category: "Project",
+        handler: () => handleSaveAs()
+      }),
+      commandRegistry.registerCommand({
+        id: "workbench.action.closeProject",
+        title: "Close Project",
+        category: "Project",
+        handler: () => handleCloseProject()
+      }),
+      commandRegistry.registerCommand({
+        id: "workbench.action.openCircuit",
+        title: "Open Circuit Schematic",
+        category: "View",
+        handler: () => { setView("workspace"); setMode("design"); }
+      }),
+      commandRegistry.registerCommand({
+        id: "workbench.action.openFirmware",
+        title: "Open Firmware Code",
+        category: "View",
+        handler: () => { setView("workspace"); setMode("code"); }
+      }),
+      commandRegistry.registerCommand({
+        id: "workbench.action.runSimulation",
+        title: "Run Simulation",
+        category: "Simulation",
+        keybinding: "F5",
+        handler: () => setIsSimulating(true)
+      }),
+      commandRegistry.registerCommand({
+        id: "workbench.action.stopSimulation",
+        title: "Stop Simulation",
+        category: "Simulation",
+        keybinding: "Shift+F5",
+        handler: () => setIsSimulating(false)
+      }),
+      commandRegistry.registerCommand({
+        id: "workbench.action.pauseSimulation",
+        title: "Pause Simulation",
+        category: "Simulation",
+        handler: () => setIsSimulating(false)
+      }),
+      commandRegistry.registerCommand({
+        id: "workbench.action.addComponent",
+        title: "Add Component",
+        category: "Circuit",
+        handler: () => handleAddPart("wokwi-led")
+      }),
+      commandRegistry.registerCommand({
+        id: "workbench.action.generateCircuitAI",
+        title: "Generate Circuit with AI",
+        category: "AI",
+        handler: () => setView("ai")
+      }),
+      commandRegistry.registerCommand({
+        id: "workbench.action.explainError",
+        title: "Explain Error with AI",
+        category: "AI",
+        handler: () => setView("ai")
+      }),
+      commandRegistry.registerCommand({
+        id: "workbench.action.formatCode",
+        title: "Format Code",
+        category: "Editor",
+        handler: () => {
+          setDebugStatus("Formatting code...");
+          setTimeout(() => setDebugStatus(""), 1500);
+        }
+      }),
+      commandRegistry.registerCommand({
+        id: "workbench.action.runTests",
+        title: "Run Tests",
+        category: "Testing",
+        handler: () => {
+          setDebugStatus("Running unit tests...");
+          setTimeout(() => setDebugStatus(""), 1500);
+        }
+      }),
+      commandRegistry.registerCommand({
+        id: "workbench.action.exportPCB",
+        title: "Export PCB Layout",
+        category: "Tools",
+        handler: () => {
+          setDebugStatus("Exporting PCB layout...");
+          setTimeout(() => setDebugStatus(""), 1500);
+        }
+      }),
+      commandRegistry.registerCommand({
+        id: "workbench.action.exportGerbers",
+        title: "Export Gerber Files",
+        category: "Tools",
+        handler: () => {
+          setDebugStatus("Exporting Gerber files...");
+          setTimeout(() => setDebugStatus(""), 1500);
+        }
+      }),
+      commandRegistry.registerCommand({
+        id: "workbench.action.openSettings",
+        title: "Open Settings",
+        category: "Preferences",
+        handler: () => setView("profile")
+      })
+    ];
+
+    return () => {
+      unregisters.forEach(u => u());
+    };
+  }, [isSimulating]);
 
   // Dirty detection
   useEffect(() => {
@@ -272,7 +407,7 @@ export function AppContent() {
     setProjectPath(null);
     setStatus("closed");
     clearCircuit();
-    setView("dashboard");
+    setView("workspace");
     setIsClosingDirty(false);
   };
 
@@ -323,7 +458,7 @@ export function AppContent() {
         onBackToDashboard={() => {
           setStatus("closed");
           setErrorContent(null);
-          setView("dashboard");
+          setView("workspace");
         }}
         onReload={() => window.location.reload()}
       />
@@ -346,7 +481,11 @@ export function AppContent() {
       isSimulating={isSimulating}
       onSimulateToggle={setIsSimulating}
       projectPath={projectPath}
+      projectName={projectName}
       files={files}
+      activeFileIndex={activeFileIndex}
+      onSelectFile={setActiveFileIndex}
+      onAddFile={handleAddTab}
       onCompileSuccess={setLastHex}
       boards={boards}
       selectedBoardId={selectedBoardId}
@@ -373,15 +512,16 @@ export function AppContent() {
       {debugStatus && (
         <div style={{
           position: 'fixed',
-          bottom: 20,
+          bottom: 30,
           left: '50%',
           transform: 'translateX(-50%)',
           zIndex: 10000,
-          background: 'black',
-          color: 'white',
-          padding: '8px 16px',
-          borderRadius: 20,
-          border: `1px solid ${COLORS.SOLDER_COPPER}`
+          background: '#1f1f1f',
+          color: '#e1e1e1',
+          padding: '6px 16px',
+          borderRadius: 4,
+          border: `1px solid ${COLORS.SOLDER_COPPER}`,
+          fontSize: '12px'
         }}>
           {debugStatus}
         </div>
@@ -390,22 +530,23 @@ export function AppContent() {
       {(status === "loading" || status === "saving") && (
         <div style={{
           position: "fixed",
-          bottom: "20px",
+          bottom: "30px",
           right: "20px",
           backgroundColor: COLORS.GRAPHITE_700,
           color: COLORS.WARM_WHITE,
-          padding: "12px 20px",
-          borderRadius: "8px",
+          padding: "10px 16px",
+          borderRadius: "4px",
           border: `1px solid ${COLORS.SOLDER_COPPER}`,
           zIndex: 10000,
           display: "flex",
           alignItems: "center",
-          gap: "12px",
+          gap: "10px",
+          fontSize: "12px",
           boxShadow: "0 4px 12px rgba(0,0,0,0.5)"
         }}>
           <div style={{
-            width: "16px",
-            height: "16px",
+            width: "14px",
+            height: "14px",
             border: `2px solid ${COLORS.FOG}`,
             borderTopColor: COLORS.SOLDER_COPPER,
             borderRadius: "50%",
